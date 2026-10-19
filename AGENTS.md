@@ -331,3 +331,5 @@ Les garanties de synchronisation (non-lus relus après chaque événement, lectu
 - **JSDoc retirés des entités** : TypeScript fournit déjà les types au survol ; ne pas remettre des commentaires qui répètent paramètres et retours sans information de contrat supplémentaire.
 - **Build Electron** : utiliser le binaire local, épinglé à la version exacte du lockfile. `npm ci` vérifie leur cohérence ; revenir à `npx --yes` ajouterait un téléchargement à l'exécution sans renforcer ce contrôle.
 - **Revues automatiques** : configuration et rotation des secrets dans le [guide Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/c5fc686f262127f7985684d8df3739b549255eea/docs/revues-github.md), plutôt que dans les commentaires du workflow.
+
+- **Déconnexion de la session renouvelable** : `POST /api/auth/logout` reçoit `refresh_token` dans le corps JSON ; le contrôleur Auth ne demande pas de Bearer. L’effacement local précède cet appel pour fermer immédiatement la session, même hors réseau. Ajouter l’ancien accès dans l’en-tête ne corrigerait pas le contrat de révocation.

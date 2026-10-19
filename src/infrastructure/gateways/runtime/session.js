@@ -164,7 +164,12 @@ module.exports = {
         methode: 'POST',
       });
       this.verifierGenerationSession(generation);
-      if (typeof reponse?.jeton !== 'string' || !reponse.jeton.trim()) {
+      if (
+        typeof reponse?.jeton !== 'string' ||
+        !reponse.jeton.trim() ||
+        typeof reponse.refresh_token !== 'string' ||
+        !reponse.refresh_token.trim()
+      ) {
         throw new Error('ERR_RECONNEXION_REQUISE');
       }
       this.memoriserJetons(reponse);

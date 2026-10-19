@@ -429,8 +429,18 @@ describe('RealGatewayRuntime', () => {
   });
 
   describe('deconnexionAutres', () => {
-    it.each([null, {}, { jeton: '' }, { jeton: '   ' }, { jeton: 42 }])(
-      'refuse une réponse sans nouveau jeton valide sans effacer la session : %j',
+    it.each([
+      null,
+      {},
+      { jeton: '' },
+      { jeton: '   ' },
+      { jeton: 42 },
+      { jeton: 'nouveau' },
+      { jeton: 'nouveau', refresh_token: '' },
+      { jeton: 'nouveau', refresh_token: '   ' },
+      { jeton: 'nouveau', refresh_token: 42 },
+    ])(
+      'refuse une réponse sans paire de jetons valide sans effacer la session : %j',
       async (reponse) => {
         const { runtime } = creerRuntime();
         runtime.etatConnexion.statut = 'connecte';
