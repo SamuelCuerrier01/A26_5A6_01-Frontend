@@ -15,14 +15,17 @@ module.exports = {
   },
 
   async configObtenir() {
+    const generation = this.generationSession;
     const config = this.mapperConfig(
       await this.appelHttp('/api/config-utilisateur')
     );
+    this.verifierGenerationSession(generation);
     this.memoriserProfilSoi(config);
     return config;
   },
 
   async configModifier({ alias, theme, langue, modeNotification, avatar }) {
+    const generation = this.generationSession;
     const corps = {};
     if (avatar !== undefined) corps.avatar = avatar ?? '';
     if (alias !== undefined) corps.alias = alias;
@@ -36,6 +39,7 @@ module.exports = {
         corps,
       })
     );
+    this.verifierGenerationSession(generation);
     this.memoriserProfilSoi(config);
     if (alias !== undefined || avatar !== undefined) this.annoncerProfil();
     return config;
@@ -48,11 +52,13 @@ module.exports = {
   },
 
   async rafraichirProfil(utilisateurId) {
+    const generation = this.generationSession;
     const pseudoAvant = this.utilisateursConnus.get(utilisateurId)?.pseudo;
     await Promise.all([
       this.resoudrePseudosInconnus([utilisateurId]),
       this.chargerProfilsPublics([utilisateurId]),
     ]);
+    this.verifierGenerationSession(generation);
     const pseudoApres = this.utilisateursConnus.get(utilisateurId)?.pseudo;
     if (pseudoAvant !== undefined && pseudoAvant !== pseudoApres) {
       this.emettre('profils-publics', [utilisateurId]);
@@ -60,10 +66,12 @@ module.exports = {
   },
 
   async rafraichirProfilSoi() {
+    const generation = this.generationSession;
     const moi = this.utilisateurConnecte?.id;
     if (!moi) return;
     try {
       const config = await this.configObtenir();
+      this.verifierGenerationSession(generation);
       if (
         config.vuLaDerniereFois !== null &&
         this.presences[moi] !== config.statutPresence

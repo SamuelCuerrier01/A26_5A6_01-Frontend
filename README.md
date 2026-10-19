@@ -52,7 +52,8 @@ Le CI vérifie la cohérence entre la version déclarée, le fichier de verrouil
 ## Sécurité et limites
 
 - Une origine distante exige HTTPS hors développement. `CHATVARDAGE_API_URL` et `CHATVARDAGE_SOCKET_URL` doivent être des origines HTTP(S), sans identifiants, chemin, paramètres ni fragment ; sans URL Socket séparée, le client utilise l'origine de l'API.
-- Le jeton n'est persisté que chiffré par `safeStorage` ; le backend Linux `basic_text` est refusé. Sans coffre sécurisé, la session reste en mémoire et l'ancien fichier est supprimé.
+- Les jetons d’accès et de renouvellement ne sont persistés que chiffrés par `safeStorage` ; le backend Linux `basic_text` est refusé. Sans coffre sécurisé, la session reste en mémoire et l'ancien fichier est supprimé.
+- L’accès de 15 minutes est renouvelé automatiquement avec rotation du jeton de renouvellement, partagé entre les requêtes concurrentes. La déconnexion efface les jetons locaux et révoque la session auprès d’Auth si le serveur est joignable. Les réponses HTTP et événements d’un ancien compte sont ignorés.
 - « Déconnecter les autres appareils » vérifie que la réponse contient un nouveau jeton avant de remplacer la session.
 - La synchronisation des non-lus, des lectures et de la pagination est décrite dans l'[architecture du frontend](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/architecture-frontend.md#flux-importants).
 - `npm audit` garde huit alertes modérées de `sprintf-js`, tirées par `electron-builder` (`global-agent`, `roarr`) ; ne pas forcer de rétrogradation du packager. Rapport d'audit : [Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/develop/docs/audit-securite-2026-10-09.md).

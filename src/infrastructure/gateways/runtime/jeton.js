@@ -16,42 +16,55 @@ function coffreJeton() {
   return safeStorage;
 }
 
-function chargerJetonPersiste() {
+function chargerSessionPersiste() {
   try {
-    const contenu = fs.readFileSync(cheminFichierSession(), 'utf8');
-    const donnees = JSON.parse(contenu);
-    if (typeof donnees.jetonChiffre === 'string' && donnees.jetonChiffre) {
-      const coffre = coffreJeton();
-      if (!coffre) return null;
-      const jeton = coffre.decryptString(
-        Buffer.from(donnees.jetonChiffre, 'base64')
+    const donnees = JSON.parse(fs.readFileSync(cheminFichierSession(), 'utf8'));
+    const coffre = coffreJeton();
+    if (!coffre) {
+      sauvegarderSessionPersiste(null);
+      return null;
+    }
+    if (
+      typeof donnees.sessionChiffree === 'string' &&
+      donnees.sessionChiffree
+    ) {
+      const session = JSON.parse(
+        coffre.decryptString(Buffer.from(donnees.sessionChiffree, 'base64'))
       );
-      return jeton || null;
-    }
-    if (typeof donnees.jeton === 'string' && donnees.jeton) {
-      if (!coffreJeton()) {
-        sauvegarderJetonPersiste(null);
+      if (
+        typeof session?.jeton !== 'string' ||
+        !session.jeton ||
+        (session.refreshToken !== null &&
+          typeof session.refreshToken !== 'string')
+      )
         return null;
-      }
-      sauvegarderJetonPersiste(donnees.jeton);
-      return donnees.jeton;
+      return session;
     }
-    return null;
+    const jeton =
+      typeof donnees.jetonChiffre === 'string' && donnees.jetonChiffre
+        ? coffre.decryptString(Buffer.from(donnees.jetonChiffre, 'base64'))
+        : donnees.jeton;
+    if (typeof jeton !== 'string' || !jeton) return null;
+    const session = { jeton, refreshToken: null };
+    sauvegarderSessionPersiste(session);
+    return session;
   } catch {
     return null;
   }
 }
 
-function sauvegarderJetonPersiste(jeton) {
+function sauvegarderSessionPersiste(session) {
   try {
-    if (jeton) {
+    if (session) {
       const coffre = coffreJeton();
       if (!coffre) {
         fs.rmSync(cheminFichierSession(), { force: true });
         return;
       }
       const donnees = {
-        jetonChiffre: coffre.encryptString(jeton).toString('base64'),
+        sessionChiffree: coffre
+          .encryptString(JSON.stringify(session))
+          .toString('base64'),
       };
       const chemin = cheminFichierSession();
       fs.writeFileSync(chemin, JSON.stringify(donnees), {
@@ -71,8 +84,8 @@ function sauvegarderJetonPersiste(jeton) {
 }
 
 module.exports = {
-  chargerJetonPersiste,
+  chargerSessionPersiste,
   cheminFichierSession,
   coffreJeton,
-  sauvegarderJetonPersiste,
+  sauvegarderSessionPersiste,
 };

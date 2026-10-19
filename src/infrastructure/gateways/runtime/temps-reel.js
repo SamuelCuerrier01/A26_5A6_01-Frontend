@@ -16,9 +16,12 @@ module.exports = {
       transports: ['websocket'],
     });
     this.socket = socket;
+    const ecouter = (evenement, rappel) =>
+      socket.on(evenement, (...args) => {
+        if (this.socket === socket) rappel(...args);
+      });
 
-    socket.on('connect', () => {
-      if (this.socket !== socket) return;
+    ecouter('connect', () => {
       this.annulerReconnexionPlanifiee();
       this.delaiReconnexionActuelMs = DELAI_RECONNEXION_INITIAL_MS;
       this.definirEtatConnexion('connecte');
@@ -43,58 +46,42 @@ module.exports = {
         this.rejoindreSocketSalon(salonId);
       }
     };
-    socket.on('connexion.prete', () => {
-      if (this.socket !== socket) return;
+    ecouter('connexion.prete', () => {
       marquerPret();
     });
 
-    socket.on('private-message.created', (m) =>
-      this.traiterMessageDmEntrant(m)
-    );
-    socket.on('private-message.updated', (m) =>
+    ecouter('private-message.created', (m) => this.traiterMessageDmEntrant(m));
+    ecouter('private-message.updated', (m) => this.traiterMessageDmModifie(m));
+    ecouter('private-message.delivered', (m) =>
       this.traiterMessageDmModifie(m)
     );
-    socket.on('private-message.delivered', (m) =>
-      this.traiterMessageDmModifie(m)
-    );
-    socket.on('private-message.deleted', (m) =>
-      this.traiterMessageDmSupprime(m)
-    );
-    socket.on('room-message.created', (m) =>
-      this.traiterMessageSalonEntrant(m)
-    );
-    socket.on('room-message.updated', (m) =>
-      this.traiterMessageSalonModifie(m)
-    );
-    socket.on('room-message.deleted', (m) =>
-      this.traiterMessageSalonSupprime(m)
-    );
-    socket.on('typing', (evt) => this.traiterSaisieEntrante(evt));
-    socket.on('presence.changed', (evt) => this.traiterPresenceEntrante(evt));
-    socket.on('profil.changed', (evt) => this.traiterProfilEntrant(evt));
-    socket.on('serveur.change', (evt) => this.traiterServeurEntrant(evt));
-    socket.on('read-state.updated', (evt) => {
+    ecouter('private-message.deleted', (m) => this.traiterMessageDmSupprime(m));
+    ecouter('room-message.created', (m) => this.traiterMessageSalonEntrant(m));
+    ecouter('room-message.updated', (m) => this.traiterMessageSalonModifie(m));
+    ecouter('room-message.deleted', (m) => this.traiterMessageSalonSupprime(m));
+    ecouter('typing', (evt) => this.traiterSaisieEntrante(evt));
+    ecouter('presence.changed', (evt) => this.traiterPresenceEntrante(evt));
+    ecouter('profil.changed', (evt) => this.traiterProfilEntrant(evt));
+    ecouter('serveur.change', (evt) => this.traiterServeurEntrant(evt));
+    ecouter('read-state.updated', (evt) => {
       void this.traiterLectureEntrante(evt);
     });
-    socket.on('room-message.revoked', (evt) => {
+    ecouter('room-message.revoked', (evt) => {
       if (typeof evt?.roomId === 'string') {
         this.roomsSocketRejointes.delete(evt.roomId);
       }
     });
 
-    socket.on('session.revoquee', () => {
-      if (this.socket !== socket) return;
+    ecouter('session.revoquee', () => {
       void this.verifierSessionApres401();
     });
 
-    socket.on('disconnect', () => {
-      if (this.socket !== socket) return;
+    ecouter('disconnect', () => {
       this.enLigneTempsReel = null;
       this.planifierReconnexion();
     });
 
-    socket.on('connect_error', () => {
-      if (this.socket !== socket) return;
+    ecouter('connect_error', () => {
       this.planifierReconnexion();
     });
   },

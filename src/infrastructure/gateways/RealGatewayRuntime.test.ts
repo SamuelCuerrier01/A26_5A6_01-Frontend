@@ -38,8 +38,8 @@ function creerRuntime() {
       baseUrlSocket: 'http://gateway.test',
     },
     {
-      chargerJetonPersiste: vi.fn(() => null),
-      sauvegarderJetonPersiste: vi.fn(),
+      chargerSessionPersiste: vi.fn(() => null),
+      sauvegarderSessionPersiste: vi.fn(),
       creerSocket: vi.fn(() => socket),
     }
   );
@@ -443,7 +443,7 @@ describe('RealGatewayRuntime', () => {
           'ERR_RECONNEXION_REQUISE'
         );
         expect(runtime.jeton).toBe('ancien');
-        expect(runtime.sauvegarderJetonPersiste).not.toHaveBeenCalled();
+        expect(runtime.sauvegarderSessionPersiste).not.toHaveBeenCalled();
         expect(connecter).not.toHaveBeenCalled();
         expect(runtime.rotationJetonEnCours).toBe(false);
       }
@@ -474,7 +474,10 @@ describe('RealGatewayRuntime', () => {
       expect(pendantAppel).toBe(true);
       expect(runtime.rotationJetonEnCours).toBe(false);
       expect(runtime.jeton).toBe('nouveau');
-      expect(runtime.sauvegarderJetonPersiste).toHaveBeenCalledWith('nouveau');
+      expect(runtime.sauvegarderSessionPersiste).toHaveBeenCalledWith({
+        jeton: 'nouveau',
+        refreshToken: 'r',
+      });
       expect(connecter).toHaveBeenCalled();
       expect(runtime.utilisateurConnecte).not.toBeNull();
     });
@@ -2131,8 +2134,8 @@ describe('RealGatewayRuntime', () => {
           baseUrlSocket: 'http://gateway.test',
         },
         {
-          chargerJetonPersiste: vi.fn(() => null),
-          sauvegarderJetonPersiste: vi.fn(),
+          chargerSessionPersiste: vi.fn(() => null),
+          sauvegarderSessionPersiste: vi.fn(),
           creerSocket: vi.fn(() => {
             const socket = creerFauxSocket();
             sockets.push(socket);
@@ -2268,8 +2271,11 @@ describe('RealGatewayRuntime', () => {
           baseUrlSocket: 'http://gateway.test',
         },
         {
-          chargerJetonPersiste: vi.fn(() => 'jwt'),
-          sauvegarderJetonPersiste: sauvegarder,
+          chargerSessionPersiste: vi.fn(() => ({
+            jeton: 'jwt',
+            refreshToken: null,
+          })),
+          sauvegarderSessionPersiste: sauvegarder,
           creerSocket: vi.fn(() => creerFauxSocket()),
         }
       );
@@ -2286,8 +2292,11 @@ describe('RealGatewayRuntime', () => {
           baseUrlSocket: 'http://gateway.test',
         },
         {
-          chargerJetonPersiste: vi.fn(() => 'jwt'),
-          sauvegarderJetonPersiste: sauvegarder,
+          chargerSessionPersiste: vi.fn(() => ({
+            jeton: 'jwt',
+            refreshToken: null,
+          })),
+          sauvegarderSessionPersiste: sauvegarder,
           creerSocket: vi.fn(() => creerFauxSocket()),
         }
       );
@@ -2296,4 +2305,368 @@ describe('RealGatewayRuntime', () => {
       expect(sauvegarder).toHaveBeenCalledWith(null);
     });
   });
+});
+
+describe('isolation et renouvellement des sessions', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+  const session = {
+    utilisateur: UTILISATEUR_BRUT,
+    jeton: 'access-old',
+    refresh_token: 'refresh-old',
+  };
+  const renouvellee = {
+    ...session,
+    jeton: 'access-new',
+    refresh_token: 'refresh-new',
+  };
+  const prepare = () => {
+    const { runtime, socket } = creerRuntime();
+    vi.spyOn(runtime, 'demarrerPollPresence').mockImplementation(() => {});
+    runtime.ouvrirSession(session);
+    return { runtime, socket };
+  };
+  it('renouvelle un accès expiré puis rejoue la requête avec les nouveaux jetons', async () => {
+    const { runtime } = prepare();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reponseJson({}, 401))
+      .mockResolvedValueOnce(reponseJson(renouvellee))
+      .mockResolvedValueOnce(reponseJson({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    expect(await runtime.appelHttp('/api/config-utilisateur')).toEqual({
+      ok: true,
+    });
+    expect(fetcher.mock.calls[1][0]).toBe(
+      'http://gateway.test/api/auth/refresh'
+    );
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+      refresh_token: 'refresh-old',
+    });
+    expect(fetcher.mock.calls[2][1].headers.Authorization).toBe(
+      'Bearer access-new'
+    );
+    expect(runtime.sauvegarderSessionPersiste).toHaveBeenLastCalledWith({
+      jeton: 'access-new',
+      refreshToken: 'refresh-new',
+    });
+    runtime.fermerSocket();
+  });
+  it('partage la rotation entre requêtes simultanées', async () => {
+    const { runtime } = prepare();
+    let complete!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const fetcher = vi.fn((url: string, init: RequestInit) => {
+      if (url.endsWith('/refresh')) return pending;
+      return Promise.resolve(
+        reponseJson(
+          {},
+          init.headers &&
+            (init.headers as Record<string, string>).Authorization ===
+              'Bearer access-old'
+            ? 401
+            : 200
+        )
+      );
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const requests = Promise.all([
+      runtime.appelHttp('/api/config-utilisateur'),
+      runtime.appelHttp('/api/config-utilisateur'),
+    ]);
+    await vi.waitFor(() =>
+      expect(
+        fetcher.mock.calls.filter(([url]) => url.endsWith('/refresh'))
+      ).toHaveLength(1)
+    );
+    complete(reponseJson(renouvellee));
+    await requests;
+    expect(runtime.jeton).toBe('access-new');
+    runtime.fermerSocket();
+  });
+  it('révoque le renouvellement lors de la déconnexion, même si le serveur est indisponible', async () => {
+    const { runtime } = prepare();
+    const fetcher = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', fetcher);
+    await runtime.deconnexion();
+    expect(runtime.jeton).toBeNull();
+    expect(runtime.refreshToken).toBeNull();
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+      refresh_token: 'refresh-old',
+    });
+    expect(runtime.sauvegarderSessionPersiste).toHaveBeenLastCalledWith(null);
+  });
+  it('une connexion tardive ne rouvre pas une session quittée', async () => {
+    const { runtime } = creerRuntime();
+    let complete!: (value: unknown) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          })
+      )
+    );
+    const login = runtime.authentifier({
+      identifiant: 'alice',
+      motDePasse: 'fixture',
+    });
+    const assertion = expect(login).rejects.toThrow('ERR_SESSION_FERMEE');
+    await runtime.deconnexion();
+    complete(reponseJson(session));
+    await assertion;
+    expect(runtime.utilisateurConnecte).toBeNull();
+  });
+  it('ignore un corps JSON et les événements socket de la session précédente', async () => {
+    const { runtime, socket } = prepare();
+    let complete!: (value: unknown) => void;
+    const body = new Promise((resolve) => {
+      complete = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => body })
+    );
+    const request = runtime.profilObtenir();
+    const assertion = expect(request).rejects.toThrow('ERR_SESSION_FERMEE');
+    await Promise.resolve();
+    runtime.refreshToken = null;
+    await runtime.deconnexion();
+    runtime.creerSocket = () => creerFauxSocket();
+    runtime.ouvrirSession({
+      utilisateur: { ...UTILISATEUR_BRUT, id: 'bob' },
+      jeton: 'bob-access',
+    });
+    const event = vi.spyOn(runtime, 'traiterMessageDmEntrant');
+    socket._declencher('private-message.created', { content: 'ancien compte' });
+    complete(UTILISATEUR_BRUT);
+    await assertion;
+    expect(runtime.utilisateurConnecte.id).toBe('bob');
+    expect(event).not.toHaveBeenCalled();
+    runtime.fermerSocket();
+  });
+  it('un refus de renouvellement expire la session sans boucle de retry', async () => {
+    const { runtime } = prepare();
+    const expired = vi.fn();
+    runtime.on('session-expiree', expired);
+    const fetcher = vi.fn().mockResolvedValue(reponseJson({}, 401));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(
+      runtime.appelHttp('/api/config-utilisateur')
+    ).rejects.toMatchObject({ statut: 401 });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(runtime.jeton).toBeNull();
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    {},
+    { jeton: '' },
+    { jeton: 'access' },
+    { jeton: 'access', refresh_token: '' },
+  ])(
+    'refuse une rotation sans paire de jetons exploitable : %j',
+    async (invalid) => {
+      const { runtime } = prepare();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reponseJson(invalid)));
+      await expect(runtime.renouvelerSession()).rejects.toThrow(
+        'ERR_RECONNEXION_REQUISE'
+      );
+      expect(runtime.jeton).toBe('access-old');
+      expect(runtime.renouvellementEnCours).toBeNull();
+      runtime.fermerSocket();
+    }
+  );
+  it('une rotation tardive ne remplace pas un compte plus récent', async () => {
+    const { runtime } = prepare();
+    let complete!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const request = vi
+      .spyOn(runtime, 'appelHttp')
+      .mockReturnValueOnce(pending)
+      .mockResolvedValue(undefined);
+    const renewal = runtime.renouvelerSession();
+    const assertion = expect(renewal).rejects.toThrow('ERR_SESSION_FERMEE');
+    await runtime.deconnexion();
+    runtime.ouvrirSession({
+      utilisateur: { ...UTILISATEUR_BRUT, id: 'bob' },
+      jeton: 'bob-access',
+    });
+    complete(renouvellee);
+    await assertion;
+    expect(runtime.jeton).toBe('bob-access');
+    request.mockRestore();
+    runtime.fermerSocket();
+  });
+  it('une réponse 401 antérieure à une rotation utilise le jeton déjà renouvelé', async () => {
+    const { runtime } = prepare();
+    let complete!: (value: unknown) => void;
+    const fetcher = vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          complete = resolve;
+        })
+      )
+      .mockResolvedValue(reponseJson({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    const request = runtime.appelHttp('/api/config-utilisateur');
+    runtime.memoriserJetons(renouvellee);
+    complete(reponseJson({}, 401));
+    await request;
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe(
+      'Bearer access-new'
+    );
+    runtime.fermerSocket();
+  });
+  it('la révocation du socket peut renouveler un accès expiré', async () => {
+    const { runtime } = prepare();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reponseJson({}, 401))
+      .mockResolvedValueOnce(reponseJson(renouvellee));
+    vi.stubGlobal('fetch', fetcher);
+    await runtime.verifierSessionApres401();
+    expect(runtime.jeton).toBe('access-new');
+    expect(runtime.verificationSessionEnCours).toBe(false);
+    runtime.fermerSocket();
+  });
+  it('restaure un accès expiré depuis une paire de jetons persistée', async () => {
+    const { runtime } = creerRuntime();
+    vi.spyOn(runtime, 'demarrerPollPresence').mockImplementation(() => {});
+    runtime.chargerSessionPersiste = () => ({
+      jeton: 'access-old',
+      refreshToken: 'refresh-old',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(reponseJson({}, 401))
+        .mockResolvedValueOnce(reponseJson(renouvellee))
+        .mockResolvedValueOnce(reponseJson(UTILISATEUR_BRUT))
+    );
+    await runtime.restaurerSession();
+    expect(runtime.utilisateurConnecte.id).toBe(UTILISATEUR_BRUT.id);
+    expect(runtime.refreshToken).toBe('refresh-new');
+    runtime.fermerSocket();
+  });
+  it('une restauration tardive ne supprime pas la nouvelle session', async () => {
+    const { runtime } = creerRuntime();
+    runtime.chargerSessionPersiste = () => ({
+      jeton: 'access-old',
+      refreshToken: null,
+    });
+    let complete!: (value: unknown) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            complete = resolve;
+          })
+      )
+    );
+    const restore = runtime.restaurerSession();
+    await runtime.deconnexion();
+    runtime.jeton = 'bob-access';
+    complete(reponseJson({}, 401));
+    expect(await restore).toBeNull();
+    expect(runtime.jeton).toBe('bob-access');
+  });
+  it('une réponse activité tardive ne repeuple pas le cache des serveurs', async () => {
+    const { runtime } = creerRuntime();
+    let complete!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      complete = resolve;
+    });
+    vi.spyOn(runtime, 'appelHttp')
+      .mockResolvedValueOnce([{ id: 'old-server', salons: [] }])
+      .mockReturnValueOnce(pending);
+    const load = runtime.chargerServeurs();
+    await runtime.deconnexion();
+    complete({ rooms: {} });
+    await expect(load).rejects.toThrow('ERR_SESSION_FERMEE');
+    expect(runtime.serveurs.size).toBe(0);
+  });
+  it('un changement direct de compte vide les caches et révoque la famille précédente', async () => {
+    const { runtime, socket } = prepare();
+    runtime.profilsPublics.set('old', { alias: 'privé' });
+    const fetcher = vi.fn().mockResolvedValue(reponseJson(undefined, 204));
+    vi.stubGlobal('fetch', fetcher);
+    runtime.creerSocket = () => creerFauxSocket();
+    runtime.ouvrirSession({
+      utilisateur: { ...UTILISATEUR_BRUT, id: 'bob' },
+      jeton: 'bob-access',
+      refresh_token: 'bob-refresh',
+    });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    expect(runtime.profilsPublics.has('old')).toBe(false);
+    expect(runtime.utilisateurConnecte.id).toBe('bob');
+    expect(runtime.refreshToken).toBe('bob-refresh');
+    expect(socket.disconnect).toHaveBeenCalled();
+    runtime.ouvrirSession({
+      utilisateur: { ...UTILISATEUR_BRUT, id: 'bob' },
+      jeton: 'bob-new',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    runtime.fermerSocket();
+  });
+  it.each([
+    ['authentifier', { identifiant: 'alice', motDePasse: 'secret' }, session],
+    [
+      'inscrire',
+      { pseudo: 'alice', courriel: 'alice@example.test', motDePasse: 'secret' },
+      session,
+    ],
+    ['profilObtenir', undefined, UTILISATEUR_BRUT],
+    ['profilModifierPseudo', 'nouveau', UTILISATEUR_BRUT],
+    [
+      'profilModifierCompte',
+      { motDePasse: 'nouveau', motDePasseActuel: 'ancien' },
+      UTILISATEUR_BRUT,
+    ],
+    ['profilSupprimerCompte', 'ancien', undefined],
+    ['deconnexionPartout', undefined, undefined],
+    ['deconnexionAutres', undefined, renouvellee],
+    ['configObtenir', undefined, { alias: 'Alice', theme: 'sombre' }],
+    ['configModifier', { alias: 'Alice' }, { alias: 'Alice', theme: 'sombre' }],
+    [
+      'renouvelerJetonApresChangementMotDePasse',
+      'alice@example.test',
+      renouvellee,
+    ],
+  ])(
+    '%s ignore une réponse du compte précédent même après résolution HTTP',
+    async (method, args, response) => {
+      const { runtime } = prepare();
+      vi.spyOn(runtime, 'appelHttp').mockImplementation(async () => {
+        queueMicrotask(() => {
+          runtime.generationSession += 1;
+          runtime.utilisateurConnecte = {
+            ...UTILISATEUR_BRUT,
+            id: 'bob',
+            pseudo: 'Bob',
+          };
+          runtime.jeton = 'bob-access';
+          runtime.refreshToken = 'bob-refresh';
+        });
+        return response;
+      });
+      await expect(runtime[method as string](args)).rejects.toThrow(
+        'ERR_SESSION_FERMEE'
+      );
+      expect(runtime.utilisateurConnecte.id).toBe('bob');
+      expect(runtime.jeton).toBe('bob-access');
+      expect(runtime.profilsPublics.has('bob')).toBe(false);
+      runtime.fermerSocket();
+    }
+  );
 });

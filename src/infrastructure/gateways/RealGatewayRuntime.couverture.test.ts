@@ -13,9 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error -- module CommonJS sans déclaration de types
 import { RealGatewayRuntime } from './RealGatewayRuntime.js';
 // @ts-expect-error -- module CommonJS sans déclaration de types
-import { chargerJetonPersiste } from './RealGatewayRuntime.js';
+import { chargerSessionPersiste } from './RealGatewayRuntime.js';
 // @ts-expect-error -- module CommonJS sans déclaration de types
-import { sauvegarderJetonPersiste } from './RealGatewayRuntime.js';
+import { sauvegarderSessionPersiste } from './RealGatewayRuntime.js';
 
 function reponseJson(corps: unknown, statut = 200) {
   return {
@@ -53,8 +53,8 @@ function creerRuntime() {
       baseUrlSocket: 'http://gateway.test',
     },
     {
-      chargerJetonPersiste: vi.fn(() => null),
-      sauvegarderJetonPersiste: vi.fn(),
+      chargerSessionPersiste: vi.fn(() => null),
+      sauvegarderSessionPersiste: vi.fn(),
       creerSocket: vi.fn(() => {
         const nouveau = creerFauxSocket();
         sockets.push(nouveau);
@@ -136,27 +136,73 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
     it('chiffre le jeton : jamais en clair dans le fichier', () => {
       simulerElectron(coffre());
-      sauvegarderJetonPersiste('jwt-secret');
+      sauvegarderSessionPersiste({ jeton: 'jwt-secret', refreshToken: null });
       const contenu = readFileSync(fichier(), 'utf8');
       expect(contenu).not.toContain('jwt-secret');
       expect(lire()).toEqual({
-        jetonChiffre: Buffer.from('terces-twj').toString('base64'),
+        sessionChiffree: Buffer.from(
+          JSON.stringify({ jeton: 'jwt-secret', refreshToken: null })
+            .split('')
+            .reverse()
+            .join('')
+        ).toString('base64'),
       });
-      expect(chargerJetonPersiste()).toBe('jwt-secret');
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'jwt-secret',
+        refreshToken: null,
+      });
       if (process.platform !== 'win32') {
         expect(statSync(fichier()).mode & 0o777).toBe(0o600);
       }
     });
 
+    it('chiffre aussi le jeton de renouvellement et refuse une session déchiffrée invalide', () => {
+      simulerElectron(coffre());
+      const session = {
+        jeton: 'access-secret',
+        refreshToken: 'refresh-secret',
+      };
+      sauvegarderSessionPersiste(session);
+      expect(chargerSessionPersiste()).toEqual(session);
+      expect(readFileSync(fichier(), 'utf8')).not.toContain('refresh-secret');
+      for (const invalid of [
+        null,
+        {},
+        { jeton: 4 },
+        { jeton: '' },
+        { jeton: 'jwt', refreshToken: 4 },
+      ]) {
+        const fake = coffre();
+        fake.decryptString.mockReturnValue(JSON.stringify(invalid));
+        simulerElectron(fake);
+        expect(chargerSessionPersiste()).toBeNull();
+      }
+    });
+
+    it('migre un ancien accès chiffré sans inventer un renouvellement', () => {
+      simulerElectron(coffre());
+      writeFileSync(
+        fichier(),
+        JSON.stringify({
+          jetonChiffre: Buffer.from('ycagel').toString('base64'),
+        })
+      );
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'legacy',
+        refreshToken: null,
+      });
+      expect(lire()).toHaveProperty('sessionChiffree');
+    });
+
     it('sans chiffrement disponible : aucune persistance', () => {
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       simulerElectron(coffre(false));
-      sauvegarderJetonPersiste('jwt-1');
+      sauvegarderSessionPersiste({ jeton: 'jwt-1', refreshToken: null });
       expect(existsSync(fichier())).toBe(false);
       writeFileSync(fichier(), JSON.stringify({ jeton: 'ancien-jwt' }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       expect(existsSync(fichier())).toBe(false);
-      sauvegarderJetonPersiste(null);
+      sauvegarderSessionPersiste(null);
       expect(existsSync(fichier())).toBe(false);
     });
 
@@ -165,14 +211,17 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         ...coffre(),
         getSelectedStorageBackend: () => 'basic_text',
       });
-      sauvegarderJetonPersiste('secret');
+      sauvegarderSessionPersiste({ jeton: 'secret', refreshToken: null });
       expect(existsSync(fichier())).toBe(false);
       simulerElectron({
         ...coffre(),
         getSelectedStorageBackend: () => 'gnome_libsecret',
       });
-      sauvegarderJetonPersiste('secret');
-      expect(chargerJetonPersiste()).toBe('secret');
+      sauvegarderSessionPersiste({ jeton: 'secret', refreshToken: null });
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'secret',
+        refreshToken: null,
+      });
     });
 
     it('migre un ancien jeton en clair vers le format chiffré', () => {
@@ -180,8 +229,11 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         mode: 0o644,
       });
       simulerElectron(coffre());
-      expect(chargerJetonPersiste()).toBe('ancien-jwt');
-      expect(lire()).toHaveProperty('jetonChiffre');
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'ancien-jwt',
+        refreshToken: null,
+      });
+      expect(lire()).toHaveProperty('sessionChiffree');
       expect(readFileSync(fichier(), 'utf8')).not.toContain('ancien-jwt');
       if (process.platform !== 'win32') {
         expect(statSync(fichier()).mode & 0o777).toBe(0o600);
@@ -191,26 +243,28 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
     it('jeton chiffré illisible : reconnexion demandée (null)', () => {
       writeFileSync(fichier(), JSON.stringify({ jetonChiffre: 'AAAA' }));
       simulerElectron(coffre(false));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       const enErreur = coffre();
       enErreur.decryptString.mockImplementation(() => {
         throw new Error('clé inconnue');
       });
       simulerElectron(enErreur);
-      expect(chargerJetonPersiste()).toBeNull();
+      writeFileSync(fichier(), JSON.stringify({ jetonChiffre: 'AAAA' }));
+      expect(chargerSessionPersiste()).toBeNull();
       const vide = coffre();
       vide.decryptString.mockReturnValue('');
       simulerElectron(vide);
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
     });
 
     it('ignore un fichier sans jeton exploitable', () => {
+      simulerElectron(coffre());
       writeFileSync(fichier(), JSON.stringify({ jeton: '' }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       writeFileSync(fichier(), JSON.stringify({ jeton: 42 }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       writeFileSync(fichier(), JSON.stringify({ jetonChiffre: '' }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
     });
 
     it("journalise une écriture impossible sans lever d'erreur", () => {
@@ -221,7 +275,9 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
           safeStorage: coffre(),
         },
       } as unknown as NodeJS.Module;
-      expect(() => sauvegarderJetonPersiste('jwt')).not.toThrow();
+      expect(() =>
+        sauvegarderSessionPersiste({ jeton: 'jwt', refreshToken: null })
+      ).not.toThrow();
       expect(journal).toHaveBeenCalled();
     });
 
@@ -230,8 +286,10 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         baseUrlHttp: 'http://g.test',
         baseUrlSocket: 'http://g.test',
       });
-      expect(runtime.chargerJetonPersiste).toBe(chargerJetonPersiste);
-      expect(runtime.sauvegarderJetonPersiste).toBe(sauvegarderJetonPersiste);
+      expect(runtime.chargerSessionPersiste).toBe(chargerSessionPersiste);
+      expect(runtime.sauvegarderSessionPersiste).toBe(
+        sauvegarderSessionPersiste
+      );
       expect(typeof runtime.creerSocket).toBe('function');
     });
   });
@@ -348,7 +406,10 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         mot_de_passe: 'nouveau123',
       });
       expect(runtime.jeton).toBe('jwt-neuf');
-      expect(runtime.sauvegarderJetonPersiste).toHaveBeenCalledWith('jwt-neuf');
+      expect(runtime.sauvegarderSessionPersiste).toHaveBeenCalledWith({
+        jeton: 'jwt-neuf',
+        refreshToken: null,
+      });
       expect(sockets).toHaveLength(1);
 
       fetchMock.mockResolvedValue({
@@ -858,7 +919,10 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
     it('restaure une session valide', async () => {
       const { runtime } = creerRuntime();
-      runtime.chargerJetonPersiste = vi.fn(() => 'jwt-persiste');
+      runtime.chargerSessionPersiste = vi.fn(() => ({
+        jeton: 'jwt-persiste',
+        refreshToken: null,
+      }));
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(reponseJson({ id: 'moi', pseudo: 'moi' }))
@@ -1381,7 +1445,7 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       );
       await vi.waitFor(() => expect(expiree).toHaveBeenCalledTimes(1));
       expect(runtime.obtenirUtilisateurConnecte()).toBeNull();
-      expect(runtime.sauvegarderJetonPersiste).toHaveBeenCalledWith(null);
+      expect(runtime.sauvegarderSessionPersiste).toHaveBeenCalledWith(null);
     });
 
     it('jeton toujours valide (ex. mot de passe actuel incorrect) : rien', async () => {

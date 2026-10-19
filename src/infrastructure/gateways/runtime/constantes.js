@@ -23,7 +23,12 @@ const DELAI_BATTEMENT_COEUR_MS = 5000;
 const CAUSE_HORS_LIGNE = 'hors-ligne';
 const CAUSE_SERVEUR_INJOIGNABLE = 'serveur-injoignable';
 const NOM_FICHIER_SESSION = 'session.json';
-const CHEMINS_SANS_SESSION = ['/api/auth/login', '/api/auth/register'];
+const CHEMINS_SANS_SESSION = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+];
 
 module.exports = {
   DELAI_SUIVI_PRESENCE_MS,

@@ -7,8 +7,8 @@ const {
   creerDmId,
 } = require('./runtime/constantes');
 const {
-  chargerJetonPersiste,
-  sauvegarderJetonPersiste,
+  chargerSessionPersiste,
+  sauvegarderSessionPersiste,
 } = require('./runtime/jeton');
 const { obtenirConfiguration } = require('../config/ConfigurationApi.js');
 
@@ -18,6 +18,8 @@ class RealGatewayRuntime {
     this.baseUrlSocket = config.baseUrlSocket;
 
     this.jeton = null;
+    this.refreshToken = null;
+    this.renouvellementEnCours = null;
     this.utilisateurConnecte = null;
     this.etatConnexion = {
       statut: 'deconnecte',
@@ -62,10 +64,10 @@ class RealGatewayRuntime {
 
     this.minuteurPollPresence = null;
 
-    this.chargerJetonPersiste =
-      options.chargerJetonPersiste ?? chargerJetonPersiste;
-    this.sauvegarderJetonPersiste =
-      options.sauvegarderJetonPersiste ?? sauvegarderJetonPersiste;
+    this.chargerSessionPersiste =
+      options.chargerSessionPersiste ?? chargerSessionPersiste;
+    this.sauvegarderSessionPersiste =
+      options.sauvegarderSessionPersiste ?? sauvegarderSessionPersiste;
     this.creerSocket = options.creerSocket ?? io;
   }
 
@@ -88,7 +90,9 @@ class RealGatewayRuntime {
     }
   }
 
-  async appelHttp(chemin, { methode = 'GET', corps } = {}) {
+  async appelHttp(chemin, { methode = 'GET', corps } = {}, reessayer = true) {
+    const generation = this.generationSession;
+    const jeton = this.jeton;
     let reponse;
     try {
       reponse = await fetch(`${this.baseUrlHttp}${chemin}`, {
@@ -98,9 +102,22 @@ class RealGatewayRuntime {
           ...(this.jeton ? { Authorization: `Bearer ${this.jeton}` } : {}),
         },
         body: corps !== undefined ? JSON.stringify(corps) : undefined,
+        signal: AbortSignal.timeout(10_000),
       });
     } catch {
       throw new Error('ERR_RESEAU_INDISPONIBLE');
+    }
+    if (generation !== this.generationSession)
+      throw new Error('ERR_SESSION_FERMEE');
+    if (
+      reponse.status === 401 &&
+      jeton &&
+      this.refreshToken &&
+      reessayer &&
+      !CHEMINS_SANS_SESSION.includes(chemin)
+    ) {
+      if (this.jeton === jeton) await this.renouvelerSession();
+      return this.appelHttp(chemin, { methode, corps }, false);
     }
     if (!reponse.ok) {
       if (
@@ -117,7 +134,10 @@ class RealGatewayRuntime {
       throw erreur;
     }
     if (reponse.status === 204) return undefined;
-    return reponse.json();
+    const resultat = await reponse.json();
+    if (generation !== this.generationSession)
+      throw new Error('ERR_SESSION_FERMEE');
+    return resultat;
   }
 
   definirEtatConnexion(statut, { cause, prochaineTentative } = {}) {
@@ -161,6 +181,6 @@ Object.assign(
 module.exports = {
   RealGatewayRuntime,
   creerDmId,
-  chargerJetonPersiste,
-  sauvegarderJetonPersiste,
+  chargerSessionPersiste,
+  sauvegarderSessionPersiste,
 };
