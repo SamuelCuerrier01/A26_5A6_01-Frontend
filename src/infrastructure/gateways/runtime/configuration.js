@@ -94,7 +94,7 @@ module.exports = {
     }
     if (!this.utilisateursConnus.has(id) && !this.profilsPublics.has(id))
       return;
-    void this.rafraichirProfil(id);
+    void this.rafraichirProfil(id).catch(() => undefined);
   },
 
   traiterServeurEntrant(evt) {

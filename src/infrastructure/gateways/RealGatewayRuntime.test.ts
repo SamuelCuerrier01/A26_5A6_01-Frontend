@@ -2553,6 +2553,28 @@ describe('isolation et renouvellement des sessions', () => {
       runtime.fermerSocket();
     }
   );
+  it('une déconnexion annule le rafraîchissement de profil en arrière-plan sans rejet non géré', async () => {
+    const { runtime } = prepare();
+    let complete!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    runtime.utilisateursConnus.set('autre', { id: 'autre', pseudo: 'Avant' });
+    vi.spyOn(runtime, 'resoudrePseudosInconnus').mockReturnValue(pending);
+    vi.spyOn(runtime, 'chargerProfilsPublics').mockResolvedValue(undefined);
+    const emit = vi.spyOn(runtime, 'emettre');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(reponseJson(undefined, 204))
+    );
+    runtime.traiterProfilEntrant({ userId: 'autre' });
+    await runtime.deconnexion();
+    complete();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(emit).not.toHaveBeenCalledWith('profils-publics', expect.anything());
+    expect(runtime.utilisateursConnus.size).toBe(0);
+    expect(runtime.utilisateurConnecte).toBeNull();
+  });
   it('renouvelle un accès expiré puis rejoue la requête avec les nouveaux jetons', async () => {
     const { runtime } = prepare();
     const fetcher = vi
