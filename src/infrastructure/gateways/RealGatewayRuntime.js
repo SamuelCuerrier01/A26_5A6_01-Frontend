@@ -3,6 +3,8 @@
 const { io } = require('socket.io-client');
 const {
   CHEMINS_SANS_SESSION,
+  CHEMIN_CONNEXION,
+  CHEMIN_INSCRIPTION,
   DELAI_RECONNEXION_INITIAL_MS,
   creerDmId,
 } = require('./runtime/constantes');
@@ -135,9 +137,9 @@ class RealGatewayRuntime {
       }
       const corpsErreur = await reponse.json().catch(() => null);
       let codeErreur = `ERR_HTTP_${reponse.status}`;
-      if (chemin === '/api/auth/login' && reponse.status === 401) {
+      if (chemin === CHEMIN_CONNEXION && reponse.status === 401) {
         codeErreur = 'ERR_IDENTIFIANTS_INVALIDES';
-      } else if (chemin === '/api/auth/register' && reponse.status === 400) {
+      } else if (chemin === CHEMIN_INSCRIPTION && reponse.status === 400) {
         codeErreur = 'ERR_INSCRIPTION_INVALIDE';
       }
       const erreur = new Error(codeErreur);

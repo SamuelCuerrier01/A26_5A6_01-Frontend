@@ -23,9 +23,11 @@ const DELAI_BATTEMENT_COEUR_MS = 5000;
 const CAUSE_HORS_LIGNE = 'hors-ligne';
 const CAUSE_SERVEUR_INJOIGNABLE = 'serveur-injoignable';
 const NOM_FICHIER_SESSION = 'session.json';
+const CHEMIN_CONNEXION = '/api/auth/login';
+const CHEMIN_INSCRIPTION = '/api/auth/register';
 const CHEMINS_SANS_SESSION = [
-  '/api/auth/login',
-  '/api/auth/register',
+  CHEMIN_CONNEXION,
+  CHEMIN_INSCRIPTION,
   '/api/auth/refresh',
   '/api/auth/logout',
 ];
@@ -36,6 +38,8 @@ module.exports = {
   CAUSE_HORS_LIGNE,
   CAUSE_SERVEUR_INJOIGNABLE,
   CHEMINS_SANS_SESSION,
+  CHEMIN_CONNEXION,
+  CHEMIN_INSCRIPTION,
   DELAI_ACK_REJOINDRE_SALON_MS,
   DELAI_BATTEMENT_COEUR_MS,
   DELAI_RECONNEXION_INITIAL_MS,

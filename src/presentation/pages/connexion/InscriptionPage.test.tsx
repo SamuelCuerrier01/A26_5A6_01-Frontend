@@ -13,6 +13,7 @@ import { t } from '../../../i18n/i18n-web';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function saisir(courriel = 'alice@example.com', motDePasse = 'secret123') {
@@ -82,10 +83,7 @@ it.each([true, false])(
     };
     const inscrire = vi.fn().mockResolvedValue(resultat);
     const navigation = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(window, 'electronAPI', {
-      configurable: true,
-      value: { allerAuTableauDeBord: navigation },
-    });
+    vi.stubGlobal('electronAPI', { allerAuTableauDeBord: navigation });
     const sessionEtablie = vi.fn();
     const changerLangue = vi.fn();
     const allerAConnexion = vi.fn();

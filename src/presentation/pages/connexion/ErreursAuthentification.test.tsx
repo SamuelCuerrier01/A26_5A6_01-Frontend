@@ -21,6 +21,7 @@ afterEach(() => {
 it.each([
   ['connexion', 401, 'ERR_IDENTIFIANTS_INVALIDES'],
   ['inscription', 400, 'ERR_INSCRIPTION_INVALIDE'],
+  ['inscription sans pseudo', 400, 'ERR_INSCRIPTION_INVALIDE'],
   ['inscription', 409, 'ERR_COURRIEL_DEJA_UTILISE'],
   ['connexion', 429, 'ERR_HTTP_429'],
   ['inscription', 429, 'ERR_HTTP_429'],
@@ -39,13 +40,16 @@ it.each([
     baseUrlHttp: 'http://gateway.test',
     baseUrlSocket: 'http://gateway.test',
   });
-  const inscription = vue === 'inscription';
+  const inscription = vue !== 'connexion';
   const afficher = (langue: string) =>
     inscription ? (
       <InscriptionPage
         gateway={{
           inscrire: (identifiants) =>
-            runtime.inscrire({ ...identifiants, pseudo: 'alice' }),
+            runtime.inscrire({
+              ...identifiants,
+              ...(vue === 'inscription' ? { pseudo: 'alice' } : {}),
+            }),
         }}
         langue={langue}
         changerLangue={vi.fn()}
@@ -94,4 +98,11 @@ it.each([
   expect(screen.getByRole('status').textContent).toBe(
     t('en', `errors.${code}`)
   );
+  if (vue === 'inscription sans pseudo') {
+    const requete = vi.mocked(fetch).mock.calls[0][1];
+    expect(JSON.parse(requete?.body as string)).not.toHaveProperty('pseudo');
+    expect(screen.getByRole('status').textContent).toBe(
+      'The server rejected the account creation request.'
+    );
+  }
 });
