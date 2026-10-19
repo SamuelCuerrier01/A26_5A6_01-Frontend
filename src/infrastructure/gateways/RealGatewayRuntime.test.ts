@@ -2446,6 +2446,42 @@ describe('isolation et renouvellement des sessions', () => {
       runtime.fermerSocket();
     }
   );
+  it.each(['mot-de-passe', 'autres-appareils'])(
+    'renouvelle un accès expiré au début de la rotation %s',
+    async (operation) => {
+      const { runtime } = prepare();
+      const fetcher = vi.fn((url: string, init: RequestInit) => {
+        if (url.endsWith('/refresh'))
+          return Promise.resolve(reponseJson(renouvellee));
+        if (url.endsWith('/login'))
+          return Promise.resolve(reponseJson(renouvellee));
+        if (
+          (init.headers as Record<string, string>).Authorization ===
+          'Bearer access-old'
+        )
+          return Promise.resolve(reponseJson({}, 401));
+        return Promise.resolve(
+          reponseJson(
+            operation === 'mot-de-passe' ? UTILISATEUR_BRUT : renouvellee
+          )
+        );
+      });
+      vi.stubGlobal('fetch', fetcher);
+      if (operation === 'mot-de-passe')
+        await runtime.profilModifierCompte({
+          motDePasse: 'nouveau',
+          motDePasseActuel: 'ancien',
+        });
+      else await runtime.deconnexionAutres();
+      expect(
+        fetcher.mock.calls.filter(([url]) => url.endsWith('/refresh'))
+      ).toHaveLength(1);
+      expect(runtime.refreshToken).toBe('refresh-new');
+      expect(runtime.utilisateurConnecte.id).toBe(UTILISATEUR_BRUT.id);
+      expect(runtime.rotationJetonEnCours).toBe(false);
+      runtime.fermerSocket();
+    }
+  );
   it('renouvelle un accès expiré puis rejoue la requête avec les nouveaux jetons', async () => {
     const { runtime } = prepare();
     const fetcher = vi

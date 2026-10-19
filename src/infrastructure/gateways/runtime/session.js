@@ -22,7 +22,7 @@ module.exports = {
     this.sauvegarderSessionPersiste({ jeton, refreshToken: this.refreshToken });
   },
 
-  renouvelerSession() {
+  renouvelerSession({ rotationExplicite = false } = {}) {
     if (this.renouvellementEnCours) return this.renouvellementEnCours;
     const generation = this.generationSession;
     const refreshToken = this.refreshToken;
@@ -40,7 +40,10 @@ module.exports = {
           !reponse.refresh_token
         )
           throw new Error('ERR_RECONNEXION_REQUISE');
-        if (this.rotationJetonEnCours || this.refreshToken !== refreshToken)
+        if (
+          (this.rotationJetonEnCours && !rotationExplicite) ||
+          this.refreshToken !== refreshToken
+        )
           throw new Error('ERR_RECONNEXION_REQUISE');
         this.memoriserJetons(reponse);
         this.connecterSocket();
@@ -167,6 +170,7 @@ module.exports = {
     try {
       const reponse = await this.appelHttp('/api/auth/logout-others', {
         methode: 'POST',
+        rotationExplicite: true,
       });
       this.verifierGenerationSession(generation);
       if (
@@ -281,6 +285,7 @@ module.exports = {
     try {
       const brut = await this.appelHttp('/api/auth/me', {
         methode: 'PATCH',
+        rotationExplicite: true,
         corps,
       });
       this.verifierGenerationSession(generation);

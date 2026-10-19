@@ -90,7 +90,11 @@ class RealGatewayRuntime {
     }
   }
 
-  async appelHttp(chemin, { methode = 'GET', corps } = {}, reessayer = true) {
+  async appelHttp(
+    chemin,
+    { methode = 'GET', corps, rotationExplicite = false } = {},
+    reessayer = true
+  ) {
     const generation = this.generationSession;
     const jeton = this.jeton;
     let reponse;
@@ -113,11 +117,12 @@ class RealGatewayRuntime {
       reponse.status === 401 &&
       jeton &&
       this.refreshToken &&
-      !this.rotationJetonEnCours &&
+      (!this.rotationJetonEnCours || rotationExplicite) &&
       reessayer &&
       !CHEMINS_SANS_SESSION.includes(chemin)
     ) {
-      if (this.jeton === jeton) await this.renouvelerSession();
+      if (this.jeton === jeton)
+        await this.renouvelerSession({ rotationExplicite });
       return this.appelHttp(chemin, { methode, corps }, false);
     }
     if (!reponse.ok) {
