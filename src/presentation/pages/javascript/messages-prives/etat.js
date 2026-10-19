@@ -1,26 +1,3 @@
-// messages-prives/etat.js — Dépendances (I18n, ChatUiShared…), éléments du DOM,
-// réseau, présence, notifications et état de la page.
-//
-// Page des messages privés (message-prive.html), découpée en scripts
-// classiques chargés dans l'ordre par message-prive.html : etat → historique → conversations → affichage → saisie → rail → message-prive.js
-// (démarrage). Ils partagent la même portée globale (const/let/fonctions de
-// haut niveau) : un fichier peut utiliser ce qu'un autre définit, à condition
-// que ce ne soit pas pendant son propre chargement — seul message-prive.js,
-// chargé en dernier, lance quoi que ce soit, au DOMContentLoaded (voir aussi
-// message-prive.chargement.test.ts, qui vérifie ce contrat).
-
-// Pas de require() ici : nodeIntegration est désactivé, comme pour
-// renderer.js (voir son commentaire équivalent en tête de fichier pour le
-// pourquoi complet).
-//
-// I18n vient de i18n-browser.js, un script classique chargé avant celui-ci
-// (voir message-prive.html) qui expose window.I18n comme global — même
-// pattern que window.NotifPrefs (voir le garde-fou plus bas dans ce
-// fichier), et qui tient tout l'état i18n (dictionnaire, langue
-// courante/par défaut) et la logique de lookup/substitution/traduction
-// d'erreurs en UN SEUL endroit partagé avec renderer.js, plutôt que deux
-// copies à synchroniser à la main (voir i18n-browser.js pour le détail
-// complet).
 const I18n =
   window.I18n ??
   (() => {
@@ -52,7 +29,6 @@ if (!LogiqueInterface) {
   );
 }
 
-// ThemeManager vient de theme-browser.js, même pattern que I18n ci-dessus.
 const ThemeManager =
   window.ThemeManager ??
   (() => {
@@ -66,10 +42,6 @@ const ThemeManager =
     };
   })();
 
-// Icône de main qui salue, en remplacement de l'emoji 👋 : voir le
-// commentaire équivalent (et le même SVG) dans renderer.js — l'emoji ne
-// s'affiche pas de façon fiable dans Electron selon les polices installées
-// sur le système (tofu box), un SVG inline s'affiche toujours.
 function creerIconeMain() {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -100,9 +72,6 @@ function creerIconeMain() {
   return svg;
 }
 
-// Voir EMOJI_VERS_ICONE/remplirTexteMessage dans renderer.js : même table et
-// même logique, dupliquées ici faute de système de module partagé entre les
-// deux scripts (voir le commentaire en tête de fichier sur nodeIntegration).
 const EMOJI_VERS_ICONE = { '👋': creerIconeMain };
 
 function remplirTexteMessage(element, texte) {
@@ -127,8 +96,6 @@ const topbarStatus = document.querySelector('.user-status');
 const topbarAvatar = document.querySelector('.topbar-avatar');
 const typingIndicator = document.getElementById('typing-indicator');
 const filterButtons = document.querySelectorAll('.filter-button');
-// Affichage en lecture seule de l'utilisateur réellement connecté, plus un vrai bouton
-// de déconnexion et un accès à la page profil.
 const currentUserPseudoEl = document.getElementById('current-user-pseudo');
 const currentUserRoleBadgeEl = document.getElementById(
   'current-user-role-badge'
@@ -148,7 +115,6 @@ const connectionDetail = document.getElementById('connection-detail');
 const connectionRetry = document.getElementById('connection-retry');
 const currentUserAvatar = document.getElementById('current-user-avatar');
 
-// 'inconnu' tant que main.js n'a pas répondu, voir renderer.js.
 let etatReseau = { statut: 'inconnu' };
 let presences = {};
 
@@ -172,7 +138,6 @@ function afficherEtatReseau(nouvelEtat = etatReseau) {
       )
     ),
   });
-  // La pastille de l'avatar dépend aussi de l'état réseau.
   afficherPresenceCourante();
 }
 
@@ -201,14 +166,6 @@ async function chargerEtatReseauEtPresences() {
   afficherPresenceCourante();
 }
 
-// window.NotifPrefs vient de notif-prefs.js, un script classique chargé
-// avant ce module (voir message-prive.html) — voir ce fichier pour le
-// pourquoi du partage entre les deux pages plutôt qu'une réimplémentation
-// locale.
-// Garde-fou : si notif-prefs.js n'a pas chargé (ordre des <script> changé
-// par erreur dans message-prive.html, échec de chargement, etc.), on
-// dégrade vers un mode "sans notifications" plutôt que de faire planter le
-// rendu des conversations (voir le même garde-fou dans renderer.js).
 const NotifPrefs =
   window.NotifPrefs ??
   (() => {
@@ -237,19 +194,9 @@ const NotifPrefs =
   })();
 const serviceNotifications = window.notifications;
 
-// Miroir de fenetreEstFocusee côté main.js (voir 'window:is-focused' /
-// 'window:focus-changed' dans preload.js) : sert uniquement à décider si
-// la conversation actuellement affichée doit être marquée "lue" (voir
-// renderActiveConversation() plus bas) — même raisonnement que dans
-// renderer.js (voir son commentaire équivalent pour le pourquoi).
 let fenetreEstFocusee = true;
 
-// Accusé de lecture de la conversation affichée : jusqu'où l'interlocuteur
-// l'a lue (✓✓, « Lu »), voir chargerLecturesDm.
 let lecturesDm = { conversationId: null, luJusqua: null };
-// Non-lus au moment d'ouvrir la conversation affichée : position de la
-// ligne « Nouveaux messages » (gardée tant qu'on y reste, alors que le
-// compteur, lui, retombe à zéro dès l'affichage).
 let separateurDm = { conversationId: null, nonLus: 0 };
 
 function definirConversationActivePourNotifs(conversationId) {
@@ -270,24 +217,13 @@ const state = {
   currentFilter: 'all',
   preferences: null,
   currentUserId: null,
-  // Utilisateur connecté complet ({id, pseudo, courriel, role} | null, voir
-  // obtenirUtilisateurConnecte dans preload.js) — state.currentUserId
-  // reste dérivé de cette valeur pour ne rien casser des usages existants
-  // qui n'ont besoin que de l'id.
   utilisateurActuel: null,
   utilisateurs: [],
   etatsSaisie: {},
 };
 
-/**
- * Affiche l'utilisateur connecté (pseudo en lecture seule + badge de
- * rôle) — voir afficherUtilisateurCourant dans renderer.js pour
- * l'équivalent salon (même logique, dupliquée pour la même raison que le
- * reste de ce fichier, voir son en-tête).
- */
 function afficherUtilisateurCourant() {
   if (currentUserPseudoEl) {
-    // Alias prioritaire, voir afficherUtilisateurCourant dans renderer.js.
     const pseudo = state.utilisateurActuel?.pseudo ?? '';
     currentUserPseudoEl.textContent = state.preferences?.alias || pseudo;
     currentUserPseudoEl.title = state.preferences?.alias ? `@${pseudo}` : '';
@@ -295,8 +231,6 @@ function afficherUtilisateurCourant() {
   afficherPresenceCourante();
   if (currentUserRoleBadgeEl) {
     const role = state.utilisateurActuel?.role;
-    // Rôle global : seul l'admin a un badge (le modérateur n'existe que
-    // dans un serveur, voir la page des salons).
     const cleRole = role === 'admin' ? 'channels.roleAdmin' : null;
     currentUserRoleBadgeEl.hidden = !cleRole;
     currentUserRoleBadgeEl.textContent = cleRole ? t(cleRole) : '';
@@ -304,15 +238,11 @@ function afficherUtilisateurCourant() {
   }
 }
 
-/** Présence des autres utilisateurs, reçue en temps réel. Appelée une fois, au démarrage (message-prive.js). */
 function brancherPresence() {
   window.electronAPI.onPresenceChange((presence) => {
     presences[presence.utilisateurId] = presence.statut;
     afficherPresenceCourante();
 
-    // Le sélecteur « Nouveau message privé » peut contenir un utilisateur
-    // avec qui aucune conversation n'existe encore. Sa présence doit donc
-    // être rafraîchie même dans ce cas, pendant que le dialogue reste ouvert.
     const choixUtilisateur = Array.from(
       dmDialogContent?.querySelectorAll('.user-choice[data-user-id]') ?? []
     ).find((element) => element.dataset.userId === presence.utilisateurId);
@@ -330,9 +260,6 @@ function brancherPresence() {
 
     conversation.otherUser.present = presence.statut === 'en-ligne';
 
-    // Les filtres « en ligne » / « hors ligne » dépendent directement de la
-    // présence : dans ce cas on reconstruit seulement la liste locale, sans
-    // refaire d'appel IPC pour recharger toutes les conversations.
     if (state.currentFilter !== 'all') {
       renderConversationList();
     } else if (listElement) {
@@ -342,8 +269,6 @@ function brancherPresence() {
       const avatar = ligne?.querySelector('.avatar');
       avatar?.classList.toggle('offline', !conversation.otherUser.present);
 
-      // Le sous-titre affiche la présence uniquement lorsqu'il n'y a encore
-      // aucun message dans cette conversation.
       if (!conversation.lastMessage) {
         const sousTitre = ligne?.querySelector('.last-message');
         if (sousTitre) {

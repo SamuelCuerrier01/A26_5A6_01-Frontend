@@ -22,14 +22,8 @@ function appendUnique(current: SearchResult[], page: SearchResult[]): SearchResu
   ];
 }
 
-/**
- * Recherche avec délai de frappe (hook commun au mobile et au Web : seule la dépendance `search` change) : une saisie plus récente annule la requête en vol et ignore sa
- * réponse. `conversationId` limite la recherche à la conversation affichée.
- */
 export type SearchDependencies = {
-  /** Appel de recherche de l'application (REST). */
   search: (input: SearchInput) => Promise<SearchPage>;
-  /** Transforme une erreur en texte affichable (traduit par chaque application). */
   describeError: (error: unknown) => string;
   debounceMs?: number;
 };
@@ -42,7 +36,6 @@ export function useSearchResults({ search, describeError, debounceMs = DEFAULT_D
   const [moreError, setMoreError] = useState<string | null>(null);
   const moreRequest = useRef(false);
   const moreController = useRef<AbortController | null>(null);
-  // Les dépendances sont lues par référence : une fonction recréée à chaque rendu ne relance pas la recherche.
   const deps = useRef({ search, describeError });
   useEffect(() => {
     deps.current = { search, describeError };
@@ -89,18 +82,15 @@ export function useSearchResults({ search, describeError, debounceMs = DEFAULT_D
     moreRequest.current = true;
     setLoadingMore(true);
     setMoreError(null);
-    // Annulé avec la recherche (nouvelle saisie, démontage) : la requête réseau est interrompue, pas seulement ignorée.
     const controller = new AbortController();
     moreController.current = controller;
     try {
       const page = await deps.current.search({ q: normalized, conversationId, cursor: current.nextCursor, signal: controller.signal });
       if (controller.signal.aborted) return;
-      // Non annulée : la clé n'a pas changé et `moreRequest` exclut toute autre page en vol, `current` est donc à jour.
       setRemote({ ...current, results: appendUnique(current.results, page.results), nextCursor: page.nextCursor });
     } catch (error) {
       if (!controller.signal.aborted) setMoreError(deps.current.describeError(error));
     } finally {
-      // Après annulation, le cleanup a déjà tout remis à zéro : ne pas toucher à une éventuelle requête plus récente.
       if (!controller.signal.aborted) {
         moreRequest.current = false;
         setLoadingMore(false);
@@ -114,7 +104,6 @@ export function useSearchResults({ search, describeError, debounceMs = DEFAULT_D
     query,
     setQuery,
     status,
-    /** Texte réellement recherché (sans espaces superflus), pour surligner les résultats. */
     term: normalized ?? '',
     results,
     hasMore: nextCursor !== null,

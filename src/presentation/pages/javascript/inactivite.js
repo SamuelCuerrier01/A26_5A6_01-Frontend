@@ -17,9 +17,6 @@
   ];
 
   function obtenirLocaleParDefaut() {
-    // L’application est livrée en français par défaut ; les traductions
-    // réelles doivent passer par `I18n.t(...)` lorsque le contexte de langue
-    // est explicitement configuré par le runtime.
     return 'fr';
   }
 
@@ -48,12 +45,6 @@
 
   function notifierDeconnexion(message) {
     try {
-      // Dans Electron, la permission de notification est généralement déjà
-      // accordée par le runtime / le système d'exploitation, donc on n'ouvre
-      // pas de demande explicite ici. Le code est volontairement conservateur :
-      // si l'environnement ne la donne pas déjà comme "granted", on ignore la
-      // notification système sans produire de dialogue additionnel, ce qui évite
-      // un comportement silencieux ambigu dans un contexte web non autorisé.
       if (
         typeof racine.Notification === 'function' &&
         racine.Notification.permission === 'granted'
@@ -81,22 +72,6 @@
     return obtenirTextesFallback().sessionInactive;
   }
 
-  /**
-   * Crée un minuteur d'inactivité.
-   *
-   * @param {Object} options
-   * @param {number} [options.delaiMs=30*60*1000]
-   * @param {() => boolean} [options.estActif]
-   * @param {(() => string) | string} [options.message]
-   * @param {(message: string) => void} [options.notifier]
-   * @param {(() => Promise<void> | void)} [options.onExpire]
-   * @param {(callback: (...args: any[]) => void, delay?: number, ...args: any[]) => number} [options.setTimeoutFn]
-   * @param {(id: number) => void} [options.clearTimeoutFn]
-   *
-   * Les rejets de `onExpire` doivent être gérés en interne par la fonction
-   * fournie ; ce minuteur les capture côté appel pour éviter une
-   * `UnhandledPromiseRejection` non explicite.
-   */
   function creerMinuteurInactivite({
     delaiMs = DELAI_INACTIVITE_MS,
     estActif = () => true,
@@ -237,9 +212,6 @@
         },
       });
 
-      // On démarre à une valeur qui représente « jamais » pour garantir qu'un
-      // premier événement fréquent est bien accepté, même si Date.now() vaut 0
-      // dans un environnement de test avec fake timers.
       let derniereReinitialisationFrequentMs = Number.NEGATIVE_INFINITY;
       const reactiver = (evenement) => {
         const estEvenementFrequent =
@@ -285,6 +257,4 @@
     }
   }
 
-  // L’initialisation de la page est volontairement explicite : le script ne doit
-  // pas s’exécuter au chargement pour respecter la convention des scripts vanilla.
 })(globalThis);

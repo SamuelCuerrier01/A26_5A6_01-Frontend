@@ -3,7 +3,6 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { useAsyncResource } from './useAsyncResource';
 
-// Le noyau est indépendant de l'application : la raison d'une erreur est fournie par l'appelant.
 const describeError = (error: unknown) => `raison : ${(error as Error).message}`;
 const isEmpty = (list: string[]) => list.length === 0;
 

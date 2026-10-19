@@ -1,56 +1,21 @@
-// salons/temps-reel.js — Temps réel : notifications, nouveaux messages, menu de notifications, indicateur de saisie, événements du processus main.
-//
-// Page des salons (index.html), découpée en scripts classiques chargés dans
-// l'ordre par index.html : etat → historique → affichage → dialogues →
-// session → temps-reel → renderer.js (démarrage). Ils partagent la même
-// portée globale (const/let/fonctions de haut niveau) : un fichier peut
-// utiliser ce qu'un autre définit, à condition que ce ne soit pas pendant
-// son propre chargement — seul renderer.js, chargé en dernier, lance quoi
-// que ce soit (voir aussi salons.chargement.test.ts, qui vérifie ce contrat).
-
 const btn = document.getElementById('message-prive-btn');
 
 btn?.addEventListener('click', () => {
   window.electronAPI.navigate('message-prive.html');
 });
 
-// --- Notifications système -----------------------------------------------
-// Remplace l'ancien câblage basé sur des CustomEvent ('channel:selected',
-// 'chat:conversation-selected', 'chat:message-received') qui n'étaient
-// jamais émis nulle part dans ce fichier (ils visaient une architecture à
-// base de ServiceSalon/src/main.js jamais branchée sur la vraie app — voir
-// src/domain/service/ServiceSalon.ts, code mort). Résultat concret : la
-// conversation "active" côté main.js n'était jamais mise à jour, et le
-// garde-fou anti-notification-sur-conversation-déjà-ouverte ne s'activait
-// donc jamais. Câblé maintenant directement aux points réels où le salon
-// affiché change (afficherMessages()) et où on envoie un message.
 const serviceNotifications = window.notifications;
 
-// Pas de service de notifications système (ex. WSL, voir notifierParRepli
-// dans main.js) : le message s'affiche dans l'app à la place.
 serviceNotifications?.onNotificationRepli?.((message) => {
   notifier(t('notifications.fallbackToast', { texte: message.contenu }));
 });
 
-// Tient fenetreEstFocusee à jour (voir sa déclaration plus haut, et la
-// requête initiale dans initialiser()) à partir des changements de focus
-// réels côté main.js. Quand la fenêtre regagne le focus alors qu'une
-// conversation était déjà affichée (donc jamais marquée "lue" pendant
-// qu'elle était en arrière-plan, voir afficherMessages()), on relance
-// l'affichage pour la marquer "lue" maintenant qu'elle est effectivement
-// visible.
 if (typeof serviceNotifications?.onFocusChange === 'function') {
   serviceNotifications.onFocusChange((focused) => {
     const regagneLeFocus = focused && !fenetreEstFocusee;
     fenetreEstFocusee = focused;
     if (regagneLeFocus) {
       afficherTout();
-      // afficherTout() ne rafraîchit pas lui-même le rond du bouton
-      // #message-prive-btn (voir son propre commentaire) : tous les autres
-      // appelants de afficherTout()/actualiser() l'appellent juste après
-      // pour cette raison (voir actualiser() et le handler de changement de
-      // mode de notif plus bas) — celui-ci l'oubliait, laissant ce rond
-      // potentiellement périmé jusqu'au prochain actualiser().
       actualiserBadgeMessagesPrives();
     }
   });
@@ -68,28 +33,16 @@ function notifierMessageSysteme(message) {
   }
 }
 
-// Clic sur une notification système (voir showMessageNotification dans
-// main.js) : ouvre directement la conversation concernée plutôt que de se
-// contenter de remettre la fenêtre au premier plan. Si c'est un salon, on
-// est déjà sur la bonne page (index.html) ; si c'est une conversation
-// privée, on mémorise la cible et on navigue vers message-prive.html, qui
-// la consommera à son chargement.
-/** Ouvre un salon (sur cette page) ou une conversation privée (page des
- * messages privés) : clic sur une notification ou sur un résultat de
- * recherche, `{ type: 'salon' | 'prive', conversationId }`. */
 async function ouvrirConversation(cible) {
   const conversationId = cible?.conversationId;
   if (!conversationId) return;
   if (cible.type === 'salon') {
     salonActifId = conversationId;
-    // Salon d'un autre serveur que celui affiché : on recharge, et
-    // obtenirEtat choisit le serveur qui contient ce salon.
     if (etat.salons.some((salon) => salon.id === conversationId)) {
       afficherTout();
     } else {
       await actualiser();
     }
-    // Résultat de recherche : jusqu'au message lui-même.
     if (cible.messageId) await allerAuMessageSalon(cible.messageId);
   } else if (cible.type === 'prive') {
     await window.electronAPI.definirCibleNavigation({
@@ -104,9 +57,6 @@ if (typeof serviceNotifications?.onNavigateToConversation === 'function') {
   serviceNotifications.onNavigateToConversation(ouvrirConversation);
 }
 
-// --- Fiche de profil ---------------------------------------------------------
-/** « Message privé » depuis une fiche : crée (ou retrouve) la conversation,
- * puis ouvre la page des messages privés dessus. */
 async function ouvrirMessagePriveAvec(autre) {
   try {
     const conversation = await window.electronAPI.demarrerConversationPrivee({
@@ -123,8 +73,6 @@ async function ouvrirMessagePriveAvec(autre) {
   }
 }
 
-/** Fiche de profil d'un utilisateur ({ id, pseudo, alias, avatar }) : photo
- * cliquée dans un message ou dans la liste des membres d'un serveur. */
 function ouvrirProfilUtilisateur(donnees) {
   if (!donnees) return;
   ChatUiShared.ouvrirFicheProfil({
@@ -136,14 +84,12 @@ function ouvrirProfilUtilisateur(donnees) {
   });
 }
 
-// --- Recherche de messages ------------------------------------------------
 ChatUiShared.brancherRechercheMessages({
   bouton: document.querySelector('#open-search'),
   dialogue: document.querySelector('#search-dialog'),
   api: window.electronAPI,
   t,
   messageErreur,
-  // Recherche dans le salon affiché.
   conversationActive: () => {
     const salon = etat.salons.find((item) => item.id === salonActifId);
     return salon
@@ -153,26 +99,6 @@ ChatUiShared.brancherRechercheMessages({
   surChoix: ouvrirConversation,
 });
 
-// --- Nouveaux messages en temps réel (salon ou DM) --------------------------
-// Le WebSocket du Serveur-API pousse un événement à chaque nouveau message,
-// salon ou DM confondus (voir 'messages:nouveau' dans main.js/preload.js). Si
-// la conversation concernée
-// est celle actuellement affichée, un actualiser() complet suffit (plus
-// simple et plus sûr qu'un ajout incrémental au DOM) ; sinon, on relaie vers
-// le même chemin de notification (rond + notification système selon
-// NotifPrefs) déjà utilisé par cette page. Corps du handler partagé avec
-// message-prive.js via NotifPrefs.traiterMessageRecu (voir
-// notif-prefs.js) : seule la partie "quoi rafraîchir à l'écran" diffère
-// réellement d'une page à l'autre.
-/**
- * Message de salon reçu en temps réel (déjà complet dans `payload`) : ajouté
- * directement à l'état affiché, SANS recharger serveurs, invitations et
- * historique de chaque salon (voir actualiser), ce qui faisait une dizaine
- * de requêtes HTTP par message reçu dans un salon actif.
- * - salon d'un autre serveur : seule la pastille du rail change ;
- * - auteur dont le nom n'est pas encore connu : rechargement complet, pour
- *   résoudre son pseudo et sa photo.
- */
 async function integrerMessageSalonRecu(payload) {
   const salon = etat.salons.find((item) => item.id === payload.salonId);
   if (!salon) {
@@ -193,10 +119,6 @@ async function integrerMessageSalonRecu(payload) {
       enChargement: false,
     };
   }
-  // On ne suit le nouveau message (défilement en bas) que s'il est dans le
-  // salon affiché ET qu'on est soi-même l'auteur ou déjà en bas de la liste :
-  // sinon, quelqu'un qui relit l'historique (ou un message d'un autre salon)
-  // le ramenait tout en bas à chaque message reçu.
   const suivre = LogiqueInterface.doitSuivreNouveauMessage({
     dansConversationAffichee: salon.id === salonActifId,
     estAuteur: message.auteurId === utilisateurActuelId,
@@ -221,13 +143,6 @@ async function integrerMessageSalonRecu(payload) {
   afficherTout(optionsAffichage);
 }
 
-/**
- * Message de salon modifié ou supprimé : appliqué sur place (page récente et
- * historique déjà remonté), SANS recharger serveurs, invitations et
- * historique de chaque salon. L'événement ne dit pas dans quel salon : on
- * cherche le message ; introuvable = message privé ou salon d'un autre
- * serveur, rien à redessiner ici.
- */
 function salonContenantMessage(messageId) {
   return etat.salons.find(
     (salon) =>
@@ -278,10 +193,6 @@ if (typeof window.electronAPI?.onNouveauMessage === 'function') {
         ? payload.salonId
         : payload.message.conversationId,
     };
-    // Message d'autrui : un non-lu de plus. S'il arrive dans le salon
-    // affiché, fenêtre au premier plan, son affichage le marque aussitôt lu
-    // (voir afficherMessages) ; sinon il reste compté (salon, serveur du
-    // rail, badge).
     if (payload.message.auteurId !== utilisateurActuelId) {
       NotifPrefs.ajouterNonLu(
         messageNormalise.type,
@@ -306,7 +217,6 @@ if (typeof window.electronAPI?.onNouveauMessage === 'function') {
   });
 }
 
-// --- Menu de préférences de notification ----------------------------------
 const elNotifBtn = document.querySelector('#open-notif-settings');
 const elNotifMenu = document.querySelector('#notif-menu');
 
@@ -329,7 +239,6 @@ function ouvrirMenuNotif() {
   elNotifBtn?.setAttribute('aria-expanded', 'true');
 }
 
-// Contenu des messages dans les notifications système (écran verrouillé).
 elNotifMenu
   ?.querySelector('#notif-apercu')
   ?.addEventListener('change', (event) => {
@@ -373,10 +282,6 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') fermerMenuNotif();
 });
 
-// --- Indicateur "en train d'écrire" (salons) ------------------------------
-// Contrairement aux DM (une seule autre personne possible), un salon peut
-// avoir plusieurs personnes qui écrivent en même temps — d'où la logique de
-// jonction de noms ci-dessous (un seul, deux, ou "un + N autres").
 let etatsSaisieSalon = [];
 
 const elTypingIndicator = document.getElementById('typing-indicator');
@@ -443,7 +348,6 @@ el.message.addEventListener('input', async (event) => {
 
   if (!auteurId || !salonId) return;
 
-  // Annule uniquement le timer actif DE CET UTILISATEUR précis
   if (timersArretSaisie[auteurId]) {
     clearTimeout(timersArretSaisie[auteurId]);
     delete timersArretSaisie[auteurId];
@@ -456,7 +360,6 @@ el.message.addEventListener('input', async (event) => {
       est_saisie: true,
     });
 
-    // Programme l'arrêt pour cet utilisateur
     timersArretSaisie[auteurId] = setTimeout(async () => {
       delete timersArretSaisie[auteurId];
       if (etatReseau.statut !== 'connecte') return;
@@ -465,7 +368,6 @@ el.message.addEventListener('input', async (event) => {
         utilisateurId: auteurId,
         est_saisie: false,
       });
-      // Force une mise à jour immédiate si ce salon est toujours affiché
       await actualiserIndicateurSaisie();
     }, 10000);
   } else {
@@ -488,14 +390,9 @@ ChatUiShared.brancherBoutonReessayer({
 window.electronAPI.onEtatReseauChange((nouvelEtat) =>
   afficherEtatReseau(nouvelEtat)
 );
-// Photo ou alias d'un autre utilisateur modifié : on redessine (les
-// avatars viennent de obtenirEtatSalons -> utilisateurs).
 window.electronAPI.onProfilsPublicsChange?.(async () => {
   await actualiser({ conserverPositionScroll: true });
 });
-// Changement dans un de mes serveurs, en temps réel (voir Room-Service →
-// Message-Service → 'serveur.change'). Plusieurs événements rapprochés
-// (ex. salon créé puis renommé) ne provoquent qu'un seul rechargement.
 const DELAI_RECHARGEMENT_SERVEURS_MS = 150;
 let minuteurRechargementServeurs = null;
 window.electronAPI.onServeurChange?.((evenement) => {
@@ -508,7 +405,6 @@ window.electronAPI.onServeurChange?.((evenement) => {
   } else if (pourMoi && evenement.raison === 'invitation') {
     notifier(t('servers.newInvitation'));
   } else if (evenement.raison === 'supprime' && nom) {
-    // `nom` vide : on l'a supprimé nous-même, déjà retiré de l'état.
     notifier(t('servers.deletedNotice', { name: nom }));
   }
   window.clearTimeout(minuteurRechargementServeurs);
@@ -540,8 +436,6 @@ window.electronAPI.onPresenceChange((presence) => {
   }
 });
 
-// Appliqués sur place, sans rechargement complet (voir
-// appliquerMessageSalonModifie / appliquerMessageSalonSupprime).
 window.electronAPI.onMessageModifieChange((message) => {
   appliquerMessageSalonModifie(message);
 });
@@ -549,21 +443,18 @@ window.electronAPI.onMessageModifieChange((message) => {
 window.electronAPI.onMessageSupprimeChange(async (message) => {
   ChatUiShared.oublierEtatActionMessage(message?.messageId);
   appliquerMessageSalonSupprime(message?.messageId);
-  // Le message peut appartenir à une conversation absente du cache local.
   await NotifPrefs.chargerNonLus(window.electronAPI);
   afficherSalons();
   actualiserBadgeMessagesPrives();
   mettreAJourBadgeApplication();
 });
 
-// Accusés de lecture (« Vu par ») et non-lus lus depuis un autre appareil.
 window.electronAPI.onLectureChange?.((lecture) => {
   void appliquerLecture(lecture);
 });
 
 window.electronAPI.onSynchronisationRequise?.(async () => {
   try {
-    // Messages reçus pendant la coupure : compteurs relus sur le serveur.
     await NotifPrefs.chargerNonLus(window.electronAPI);
     await actualiser({ conserverPositionScroll: true });
     if (salonActifId) await chargerLecturesSalon(salonActifId);

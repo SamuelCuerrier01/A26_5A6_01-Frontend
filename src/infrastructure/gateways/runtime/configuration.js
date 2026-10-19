@@ -1,12 +1,6 @@
 'use strict';
 
-// runtime/configuration.js — Configuration utilisateur (alias, thème, langue, notifications).
-// Méthodes de RealGatewayRuntime, ajoutées à son prototype (voir
-// RealGatewayRuntime.js) : `this` est l'instance.
-
 module.exports = {
-  // --- Configuration utilisateur (alias, thème, langue, notifications) --------
-
   mapperConfig(brut) {
     return {
       alias: brut.alias ?? null,
@@ -30,7 +24,6 @@ module.exports = {
 
   async configModifier({ alias, theme, langue, modeNotification, avatar }) {
     const corps = {};
-    // Chaîne vide = retirer l'avatar (même convention que l'alias).
     if (avatar !== undefined) corps.avatar = avatar ?? '';
     if (alias !== undefined) corps.alias = alias;
     if (theme !== undefined) corps.theme = theme;
@@ -44,24 +37,16 @@ module.exports = {
       })
     );
     this.memoriserProfilSoi(config);
-    // Seuls l'alias et l'avatar sont visibles des autres (pas le thème…).
     if (alias !== undefined || avatar !== undefined) this.annoncerProfil();
     return config;
   },
 
-  /** Signale aux autres clients que notre profil public a changé. */
   annoncerProfil() {
     if (this.socketPret && this.socket?.connected) {
       this.socket.emit('profil.update');
     }
   },
 
-  /**
-   * Profil d'un autre utilisateur modifié ('profil.changed') : on recharge
-   * son pseudo (Authentification) et son alias/avatar (User-Config-Service).
-   * 'profils-publics' est émis si quelque chose a changé, pour que l'UI
-   * redessine.
-   */
   async rafraichirProfil(utilisateurId) {
     const pseudoAvant = this.utilisateursConnus.get(utilisateurId)?.pseudo;
     await Promise.all([
@@ -74,12 +59,6 @@ module.exports = {
     }
   },
 
-  /**
-   * Notre propre profil modifié sur un autre appareil (alias, avatar,
-   * présence) : on relit la configuration, puis 'profil-soi' prévient le
-   * processus main qui réaligne toutes les pages (voir main/preferences.js),
-   * sans attendre le sondage de présence.
-   */
   async rafraichirProfilSoi() {
     const moi = this.utilisateurConnecte?.id;
     if (!moi) return;
@@ -95,9 +74,7 @@ module.exports = {
         });
       }
       this.emettre('profil-soi', config);
-    } catch {
-      // Best-effort : le sondage de présence finira par se réaligner.
-    }
+    } catch {}
   },
 
   traiterProfilEntrant(evt) {
@@ -107,24 +84,15 @@ module.exports = {
       void this.rafraichirProfilSoi();
       return;
     }
-    // Uniquement les utilisateurs qu'on affiche déjà quelque part.
     if (!this.utilisateursConnus.has(id) && !this.profilsPublics.has(id))
       return;
     void this.rafraichirProfil(id);
   },
 
-  /**
-   * Changement dans un de nos serveurs, signalé par Room-Service via
-   * Message-Service : relayé aux pages ('serveur-change'), qui rechargent.
-   */
   traiterServeurEntrant(evt) {
     if (typeof evt?.serveurId !== 'string' || typeof evt.raison !== 'string') {
       return;
     }
-    // Serveur par défaut : tout le monde en est membre. Un changement de
-    // membre qui ne nous vise pas (rôle d'un autre…) ne change rien à notre
-    // page : on ne la recharge pas, sinon chaque changement ferait recharger
-    // la page de tous les clients connectés.
     if (
       evt.raison === 'membres' &&
       evt.cibleId !== this.utilisateurConnecte?.id &&

@@ -3,19 +3,12 @@ import path from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Test d'intégration de la page des messages privés (message-prive.html) :
-// ses scripts sont exécutés dans l'ordre de la page avec une fausse API
-// Electron, pour vérifier qu'un message reçu, envoyé, modifié ou supprimé
-// est appliqué à sa conversation SANS recharger toutes les conversations.
-
 const PAGES = path.resolve(__dirname, '..');
 const RACINE = path.resolve(PAGES, '../../..');
 const traductions = JSON.parse(
   readFileSync(path.join(RACINE, 'src/i18n/translations.json'), 'utf8')
 );
 
-// Scripts de la page, dans l'ordre réel de message-prive.html (lu dans le
-// fichier : un script ajouté à la page est donc aussi chargé ici).
 const SCRIPTS = [
   ...readFileSync(path.join(PAGES, 'message-prive.html'), 'utf8').matchAll(
     /<script src="([^"]+)"><\/script>/g
@@ -64,7 +57,6 @@ async function chargerPage({
     {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
-      // http (et non file://) : jsdom refuse sessionStorage aux origines opaques.
       url: 'http://localhost/message-prive.html',
       virtualConsole: consoleVirtuelle,
     }
@@ -72,8 +64,6 @@ async function chargerPage({
   pagesOuvertes.push(dom);
   const { window } = dom;
 
-  // jsdom ne fournit pas l'API native <dialog>. L'application l'utilise
-  // réellement dans Electron/Chromium; le test reproduit donc ce contrat.
   if (window.HTMLDialogElement) {
     window.HTMLDialogElement.prototype.showModal = function () {
       this.setAttribute('open', '');
@@ -123,7 +113,6 @@ async function chargerPage({
         return (...args: unknown[]) => {
           appels[nom] = (appels[nom] ?? 0) + 1;
           const reponse = reponses[nom];
-          // Réponse calculée (peut échouer) : voir les tests d'erreur.
           if (typeof reponse === 'function') {
             return Promise.resolve().then(() => reponse(...args));
           }
@@ -143,7 +132,6 @@ async function chargerPage({
   });
 
   avantScripts(window);
-  // Sans démarrage : tous les scripts sauf le point d'entrée.
   const scripts = demarrer
     ? SCRIPTS
     : SCRIPTS.filter((script) => script !== 'javascript/message-prive.js');
@@ -154,7 +142,6 @@ async function chargerPage({
   }
   const document = window.document;
   if (!demarrer) return { window, document, rappels, appels, erreurs };
-  // La page démarre sur DOMContentLoaded, déjà passé à l'injection.
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
 
   if (!attendreMessages) return { window, document, rappels, appels, erreurs };
@@ -197,8 +184,6 @@ describe('page des messages privés', () => {
   });
 
   it('ne lance rien pendant le chargement des scripts (contrat du découpage)', async () => {
-    // messages-prives/*.js ne font que déclarer (aucun appel, aucun
-    // abonnement) : seul message-prive.js démarre la page.
     const { rappels, appels, erreurs } = await chargerPage({ demarrer: false });
     expect(erreurs).toEqual([]);
     expect(appels).toEqual({});
@@ -218,13 +203,10 @@ describe('page des messages privés', () => {
 
     const autre = await chargerPage({ avantScripts: cache('ancien-compte') });
     expect(autre.document.querySelector(icone)).toBeNull();
-    // Cache d'un autre compte : effacé (puis réécrit pour le compte courant
-    // quand le rail arrive du réseau).
     expect(
       autre.window.localStorage.getItem('chatvardage:rail-serveurs') ?? ''
     ).not.toContain('ancien-compte');
 
-    // Même compte, réseau encore en attente : le rail vient du cache.
     const moi = await chargerPage({
       avantScripts: cache('moi'),
       autresReponses: { obtenirServeurs: () => new Promise(() => {}) },
@@ -255,7 +237,6 @@ describe('page des messages privés', () => {
     });
     expect(typesDemandes).toEqual([['prive']]);
 
-    // « + » du rail : ouvrir l'ajout de serveur sur la page des salons.
     document
       .getElementById('open-create-channel-rail')
       ?.dispatchEvent(new document.defaultView!.MouseEvent('click'));
@@ -292,7 +273,6 @@ describe('page des messages privés', () => {
       expect(textes(document)).toEqual(['salut', 'corrigé'])
     );
 
-    // Message de salon (sans conversationId) : ignoré par cette page.
     await rappels.onMessageModifieChange({
       id: 'r1',
       auteurId: 'bob',
@@ -342,7 +322,6 @@ describe('page des messages privés', () => {
       autresReponses: {
         obtenirConversationsPrivees: () => {
           essais += 1;
-          // Forme réelle d'une erreur IPC d'Electron côté page.
           if (essais === 1) {
             throw "Error invoking remote method 'obtenir-conversations-privees': Error: ERR_RESEAU_INDISPONIBLE";
           }
@@ -359,7 +338,6 @@ describe('page des messages privés', () => {
     expect(document.querySelector('#toast')?.textContent).toContain(
       'Impossible de joindre le serveur'
     );
-    // Nouvel essai ~5 s plus tard : la conversation apparaît.
     await vi.waitFor(
       () =>
         expect(
@@ -439,7 +417,6 @@ describe('page des messages privés', () => {
   });
 
   it('liste paginée : 15 conversations, puis « Voir plus de conversations »', async () => {
-    // 20 conversations, de la plus récente (c0) à la plus ancienne (c19).
     const liste = Array.from({ length: 20 }, (_, i) => ({
       id: `c${i}:moi`,
       participantIds: ['moi', `c${i}`],
@@ -523,7 +500,6 @@ describe('page des messages privés', () => {
     );
     expect(compteur('bob:moi')?.hidden).toBe(true);
     expect(compteur('carla:moi')?.textContent).toBe('4');
-    // Compteur du serveur qui a un salon non lu, pas de l'autre.
     await vi.waitFor(() =>
       expect(
         document.querySelector<HTMLElement>(
@@ -531,7 +507,6 @@ describe('page des messages privés', () => {
         )?.hidden
       ).toBe(false)
     );
-    // Compteur numérique : somme des non-lus des salons du serveur.
     expect(
       document.querySelector<HTMLElement>(
         '.server-icon[data-serveur-id="srv"] .notif-count--rail'
@@ -545,7 +520,6 @@ describe('page des messages privés', () => {
 
     nonLus.prives['bob:moi'] = 0;
     nonLus.prives['carla:moi'] = 5;
-    // Message reçu dans une autre conversation : un non-lu de plus.
     await rappels.onNouveauMessage({
       conversationType: 'dm',
       message: {
@@ -557,7 +531,6 @@ describe('page des messages privés', () => {
       expect(compteur('carla:moi')?.textContent).toBe('5')
     );
     nonLus.salons.s2 = 1;
-    // Message de salon : compteur de son serveur.
     await rappels.onNouveauMessage({
       conversationType: 'salon',
       salonId: 's2',
@@ -672,7 +645,6 @@ describe('page des messages privés', () => {
       const ligne = () => document.querySelector('.read-receipt')?.textContent;
       expect(statuts()).toEqual(['○']);
       expect(ligne()).toBeUndefined();
-      // La ligne est sous mon dernier message.
       expect(
         document
           .querySelector('.read-status')
@@ -691,7 +663,6 @@ describe('page des messages privés', () => {
       await vi.waitFor(() => expect(statuts()).toEqual(['✓✓']));
       expect(ligne()).toBeUndefined();
 
-      // Lecture d'une autre conversation : sans effet ici.
       await rappels.onLectureChange({
         type: 'prive',
         conversationId: 'carla:moi',
@@ -727,7 +698,6 @@ describe('page des messages privés', () => {
           'et toi ?',
         ])
       );
-      // Pas encore de ligne « Lu » : le dernier message n'est pas le mien.
       expect(document.querySelector('.read-receipt')).toBeNull();
     });
 
@@ -816,11 +786,8 @@ describe('page des messages privés', () => {
     );
     expect(demandes).toEqual([
       expect.objectContaining({ autourId: 'ancien', taille: 50 }),
-      // Y a-t-il des messages plus récents ? (un seul suffit)
       expect.objectContaining({ apresId: 'ancien', taille: 50 }),
     ]);
-    // Rien après la cible : la fenêtre rejoint les messages récents déjà
-    // affichés, sans bouton « plus récents ».
     expect(textes(document)).toEqual(['un vieux message', 'salut']);
   });
 });
@@ -946,7 +913,6 @@ it('recherche Dm : roue pendant un seul chargement puis pagination depuis la cib
       .querySelector('[data-message-id="ancien"]')
       ?.classList.contains('message-cible')
   ).toBe(true);
-  // Une page de messages plus récents arrive avec la cible.
   expect(document.querySelector('[data-message-id="m1"]')).not.toBeNull();
   expect(demandes[1]).toMatchObject({ apresId: 'ancien', taille: 50 });
   const bouton = [...document.querySelectorAll('button')].find(
@@ -994,7 +960,6 @@ it.each([
     const bouton = [...document.querySelectorAll('button')].find(
       (element) => element.textContent === traductions.fr.history.loadNewer
     );
-    // Échec : le bouton reste, la suite existe peut-être.
     expect(Boolean(bouton)).toBe(cas === 'vérification en échec');
   }
 );
@@ -1036,7 +1001,6 @@ describe('fiche de profil (messages privés)', () => {
     const fermer = () =>
       fiche()?.querySelector<HTMLButtonElement>('.close-button')?.click();
 
-    // Conversation affichée (bob) : pas de bouton vers elle-même.
     const actif = document.querySelector(
       '#message-list .message-row .avatar-clickable'
     ) as HTMLElement;
@@ -1061,7 +1025,6 @@ describe('fiche de profil (messages privés)', () => {
     );
     expect(fiche()).toBeNull();
 
-    // Photo dans la liste : fiche, sans ouvrir la conversation.
     const carol = [
       ...document.querySelectorAll<HTMLElement>(
         '#conversation-list .conversation'

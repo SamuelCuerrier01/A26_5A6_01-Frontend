@@ -1,8 +1,5 @@
 'use strict';
 
-// runtime/temps-reel.js — Socket.IO : connexion, événements temps réel, salons rejoints.
-// Méthodes de RealGatewayRuntime, ajoutées à son prototype (voir
-// RealGatewayRuntime.js) : `this` est l'instance.
 const {
   DELAI_ACK_REJOINDRE_SALON_MS,
   DELAI_RECONNEXION_INITIAL_MS,
@@ -11,13 +8,11 @@ const {
 } = require('./constantes');
 
 module.exports = {
-  // --- WebSocket (Socket.IO) : événements temps réel ---------------------------
-
   connecterSocket() {
     this.fermerSocket();
     const socket = this.creerSocket(`${this.baseUrlSocket}/messages`, {
       auth: { token: this.jeton },
-      reconnection: false, // backoff géré nous-même, voir planifierReconnexion
+      reconnection: false,
       transports: ['websocket'],
     });
     this.socket = socket;
@@ -28,37 +23,21 @@ module.exports = {
       this.delaiReconnexionActuelMs = DELAI_RECONNEXION_INITIAL_MS;
       this.definirEtatConnexion('connecte');
       this.demarrerBattementCoeur();
-      // Profils modifiés pendant la coupure : rattrapés au prochain sondage
-      // (voir avatarsARafraichir). Inutile à la toute première connexion,
-      // les profils viennent d'être chargés avec leurs photos.
       if (this.dejaConnecte) this.avatarsARafraichir = true;
       this.dejaConnecte = true;
-      // Présence et salons : PAS ici, mais sur 'connexion.prete' (plus bas),
-      // avec un repli si cet événement n'arrive jamais.
       clearTimeout(this.minuteurRepliConnexionPrete);
       this.minuteurRepliConnexionPrete = setTimeout(() => {
         if (this.socket === socket && !this.socketPret) marquerPret();
       }, DELAI_REPLI_CONNEXION_PRETE_MS);
     });
 
-    // Message-Service a fini d'authentifier ce socket. 'connect' arrive
-    // AVANT (dès la poignée de main) : un 'presence.update' ou un
-    // 'room-message.join' émis à ce moment-là est refusé par le serveur
-    // (socket pas encore authentifié) — on restait alors « hors ligne »
-    // pour les autres après une coupure réseau, et sans messages en direct.
     const marquerPret = () => {
       clearTimeout(this.minuteurRepliConnexionPrete);
       this.socketPret = true;
-      // Redis Pub/Sub ne rejoue rien : les pages doivent relire leur etat
-      // durable en REST une fois le socket authentifie et abonne aux DM.
       this.emettre('synchronisation-requise');
-      // Les autres clients ont pu nous voir « hors ligne » pendant la coupure.
       this.annoncerPresence();
-      // Session serveur neuve : abonnement à la présence à refaire.
       this.cleSuiviPresence = null;
       this.suivrePresence();
-      // Rejoint à nouveau les rooms Socket.IO des salons déjà connus (une
-      // reconnexion Socket.IO démarre une session serveur neuve).
       this.roomsSocketRejointes.clear();
       for (const salonId of this.salonsRejoints) {
         this.rejoindreSocketSalon(salonId);
@@ -91,42 +70,29 @@ module.exports = {
       this.traiterMessageSalonSupprime(m)
     );
     socket.on('typing', (evt) => this.traiterSaisieEntrante(evt));
-    // Présence en temps réel (voir Message-Service, 'presence.changed').
     socket.on('presence.changed', (evt) => this.traiterPresenceEntrante(evt));
     socket.on('profil.changed', (evt) => this.traiterProfilEntrant(evt));
     socket.on('serveur.change', (evt) => this.traiterServeurEntrant(evt));
     socket.on('read-state.updated', (evt) => {
       void this.traiterLectureEntrante(evt);
     });
-    // Accès à un salon perdu (expulsion, salon réservé…) : Message-Service a
-    // retiré ce socket de la room. On l'oublie pour pouvoir la rejoindre de
-    // nouveau si l'accès revient (voir rejoindreSocketSalon).
     socket.on('room-message.revoked', (evt) => {
       if (typeof evt?.roomId === 'string') {
         this.roomsSocketRejointes.delete(evt.roomId);
       }
     });
 
-    // Jeton refusé par Message-Service (révoqué, expiré), juste avant qu'il
-    // ne ferme le socket : on vérifie la session (voir
-    // verifierSessionApres401) au lieu de se reconnecter en boucle avec un
-    // jeton mort. Si elle est bien morte, retour à l'écran de connexion.
     socket.on('session.revoquee', () => {
       if (this.socket !== socket) return;
       void this.verifierSessionApres401();
     });
 
-    // Le garde `this.socket !== socket` ignore les événements d'un socket
-    // déjà remplacé ou fermé volontairement (voir fermerSocket).
     socket.on('disconnect', () => {
       if (this.socket !== socket) return;
       this.enLigneTempsReel = null;
       this.planifierReconnexion();
     });
 
-    // Avec `reconnection: false`, un échec de connexion n'émet QUE
-    // 'connect_error' (jamais 'disconnect') : sans ce rappel, une tentative
-    // ratée laissait l'app bloquée indéfiniment sur "Reconnexion…".
     socket.on('connect_error', () => {
       if (this.socket !== socket) return;
       this.planifierReconnexion();
@@ -135,16 +101,9 @@ module.exports = {
 
   rejoindreSocketSalon(salonId) {
     const socket = this.socket;
-    // Socket pas encore authentifié : le salon (déjà dans salonsRejoints)
-    // sera rejoint à la réception de 'connexion.prete'.
     if (!socket || !this.socketPret || this.roomsSocketRejointes.has(salonId)) {
       return;
     }
-    // Marqué tout de suite (évite les doublons pendant l'attente), puis
-    // oublié si Message-Service ne confirme pas : accès refusé (il n'appelle
-    // alors pas l'accusé de réception) ou Room-Service trop lent. Le salon
-    // sera redemandé au prochain obtenirEtat / à la prochaine reconnexion,
-    // au lieu de rester à tort « rejoint » sans jamais recevoir de message.
     this.roomsSocketRejointes.add(salonId);
     socket
       .timeout(DELAI_ACK_REJOINDRE_SALON_MS)

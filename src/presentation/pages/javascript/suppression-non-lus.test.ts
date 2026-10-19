@@ -18,7 +18,7 @@ it.each(['salons', 'prives'])(
     await NotifPrefs.chargerNonLus({ obtenirNonLus });
     obtenirNonLus.mockResolvedValue({ salons: {}, prives: {} });
     let finir!: (valeur: { salons: object; prives: object }) => void;
-    const suppressionLocale = vi.fn(() => undefined); // Aucun message en cache.
+    const suppressionLocale = vi.fn(() => undefined);
     const rafraichir = vi.fn(() => {
       expect(NotifPrefs.totalNonLus()).toBe(0);
     });
@@ -37,7 +37,6 @@ it.each(['salons', 'prives'])(
     });
     obtenirNonLus.mockImplementationOnce(() => new Promise((resolve) => { finir = resolve; }));
     const attente = traitement({ messageId: 'supprime-hors-cache' });
-    // Le rendu attend la réponse autoritaire, plutôt que de décrémenter à l'aveugle.
     await Promise.resolve();
     expect(rafraichir).not.toHaveBeenCalled();
     finir({ salons: {}, prives: {} });

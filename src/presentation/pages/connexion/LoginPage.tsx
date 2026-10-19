@@ -10,30 +10,17 @@ import mascotLogo from '../../../../assets/icon.png';
 import type { AuthGateway } from '../../../infrastructure/gateways/AuthGateway';
 import { t, LANGUES_SUPPORTEES } from '../../../i18n/i18n-web';
 
-/**
- * Sous-ensemble de AuthGateway réellement nécessaire à cet écran (principe
- * de ségrégation d'interface, voir AuthGateway.ts).
- */
 export type GatewaySession = Pick<AuthGateway, 'authentifier'>;
 
 type LoginPageProps = {
   gateway: GatewaySession;
-  /** Langue actuelle ('fr' ou 'en'), pilotée par le composant parent (voir main.tsx). */
   langue: string;
-  /** Demande un changement de langue ; le parent est responsable de le confirmer via l'IPC. */
   changerLangue: (langue: string) => void;
-  /** Appelé une fois la session établie ; par défaut, redirige vers le tableau de bord via electronAPI. */
   onSessionEtablie?: () => void;
-  /** Bascule vers l'écran d'inscription (voir main.tsx / InscriptionPage.tsx). */
   allerAInscription: () => void;
-  /** Clé de traduction d'un message d'information à afficher en arrivant
-   * (ex. 'auth.sessionExpired'), ou null. */
   messageRetour?: string | null;
 } & (
   | {
-      /** Quand ce flag est activé, la modale exige une confirmation explicite.
-       * La référence de callback doit être stable (mémorisée par le parent),
-       * sinon le focus trap peut se réinitialiser à chaque rendu. */
       messageRetourConfirmable: true;
       onMessageRetourConfirme: () => void;
     }
@@ -43,23 +30,10 @@ type LoginPageProps = {
     }
 );
 
-
 interface ErreurSoumission {
-  /** Clé de traduction (ex. "auth.invalidFormat") ou code brut venant du
-   * backend (ex. "ERR_IDENTIFIANTS_INVALIDES") — jamais un texte déjà
-   * traduit, pour que le message affiché se retraduise tout seul si la
-   * langue change après coup (voir traduireErreurSoumission ci-dessous). */
   cle: string;
 }
 
-/**
- * Traduit erreurSoumission.cle dans la langue COURANTE (recalculé à chaque
- * rendu, jamais mis en cache) : (1) une clé de validation locale connue
- * (ex. "auth.invalidFormat"), ou (2) un code d'erreur backend au format
- * "errors.CODE" (voir nettoyerPrefixeIpc dans main.tsx, qui ne traduit plus
- * rien lui-même). Repli sur un message générique traduit si le code est
- * inconnu, plutôt qu'afficher une clé technique brute à l'utilisateur.
- */
 function traduireErreurSoumission(
   langue: string,
   erreur: ErreurSoumission
@@ -218,7 +192,6 @@ export function LoginPage({
           </button>
         ))}
       </div>
-
 
       <div className="login-brand">ChatVardage</div>
       <form className="login-card" onSubmit={handleSubmit} noValidate>

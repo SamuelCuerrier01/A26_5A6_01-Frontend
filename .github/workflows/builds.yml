@@ -6,9 +6,6 @@ permissions:
 env:
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-# Lint et tests (couverture à 100 %) à chaque PR et sur les branches
-# principales ; les builds multiplateformes seulement sur un tag v* ou à la
-# demande.
 on:
   workflow_dispatch:
   pull_request:
@@ -33,16 +30,10 @@ jobs:
           cache: npm
       - run: node scripts/verifier-version.mjs
       - run: npm ci
-      # Toutes les dépendances (dev comprises) : une vulnérabilité high ou
-      # critical ne doit pas pouvoir entrer sans faire échouer le CI.
       - run: npm audit --audit-level=high
       - run: npm run lint
-      # Types vérifiés à chaque PR : Vite et Vitest transpilent sans contrôler.
       - run: npx tsc --noEmit -p tsconfig.json
-      # Couverture à 100 % exigée (voir vitest.config.ts).
       - run: npm run test:coverage
-      # Bundle de la page de connexion : une erreur de build ne doit pas
-      # attendre le prochain tag pour être détectée.
       - run: npm run build:login
 
   build:

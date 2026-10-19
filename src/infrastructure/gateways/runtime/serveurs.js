@@ -1,20 +1,8 @@
 'use strict';
 
-// runtime/serveurs.js — Serveurs, salons, membres et invitations (Room-Service).
-// Méthodes de RealGatewayRuntime, ajoutées à son prototype (voir
-// RealGatewayRuntime.js) : `this` est l'instance.
 const { TAILLE_PAGE_MEMBRES, TAILLE_PAGE_MESSAGES } = require('./constantes');
 
 module.exports = {
-  // --- Salons (HTTP, voir Room-Service) ----------------------------------------
-
-  // --- Serveurs et salons (Room-Service, façon Discord) ----------------------
-
-  /**
-   * Salon d'un serveur, dans la forme attendue par la page des salons.
-   * `visibilite: 'prive'` pour un salon réservé aux modérateurs (affiché
-   * avec un cadenas).
-   */
   mapperSalon(brut) {
     const reserve = brut.acces === 'moderateurs';
     return {
@@ -56,10 +44,6 @@ module.exports = {
     };
   },
 
-  /**
-   * Dernier message de chaque salon lisible (`room:<id>` -> date). Une panne
-   * laisse l'ordre de l'API : ce n'est qu'un tri.
-   */
   async chargerActiviteSalons() {
     try {
       const corps = await this.appelHttp('/api/messages/activity');
@@ -69,11 +53,6 @@ module.exports = {
     }
   },
 
-  /**
-   * GET /api/servers, mémorisé (voir `this.serveurs`), du serveur le plus
-   * récemment actif (dernier message d'un de ses salons) au moins actif ; à
-   * égalité ou sans message, l'ordre de l'API est conservé.
-   */
   async chargerServeurs() {
     const generation = this.generationSession;
     const [bruts, activite] = await Promise.all([
@@ -89,8 +68,6 @@ module.exports = {
       .map((serveur) => ({ serveur, date: derniere(serveur) }))
       .sort((a, b) => b.date - a.date)
       .map(({ serveur }) => serveur);
-    // Déconnecté pendant l'appel : ces serveurs sont ceux de l'ancien
-    // compte, ils ne doivent pas repeupler l'état de la session suivante.
     if (generation !== this.generationSession) {
       throw new Error('ERR_SESSION_FERMEE');
     }
@@ -105,7 +82,6 @@ module.exports = {
     return serveurs;
   },
 
-  /** Liste légère des serveurs (rail de la page messages privés). */
   async obtenirServeurs() {
     const serveurs = await this.chargerServeurs();
     return serveurs.map((serveur) => this.resumeServeur(serveur));
@@ -133,8 +109,6 @@ module.exports = {
     messages.forEach((m) =>
       this.indexMessages.set(m.id, { type: 'salon', roomId: salonId })
     );
-    // Noms et photos des auteurs (la liste des membres n'est plus chargée
-    // avec le serveur, voir obtenirMembresServeur).
     await this.resoudrePseudos(messages.map((m) => m.auteurId));
     return { messages, finHistorique: bruts.length < limite };
   },
@@ -150,13 +124,6 @@ module.exports = {
     }
   },
 
-  /**
-   * État de la page des salons : mes serveurs (rail), le serveur actif avec
-   * ses salons (et leurs derniers messages) et mes invitations.
-   * Serveur actif : celui qui contient `salonId` s'il est fourni (ouverture
-   * depuis une notification), sinon `serveurId`, sinon le premier
-   * (Chatvardage).
-   */
   async obtenirEtat({ serveurId, salonId } = {}) {
     const [serveurs, invitationsBrutes] = await Promise.all([
       this.chargerServeurs(),
@@ -165,12 +132,9 @@ module.exports = {
     const actifId =
       (salonId && this.salonVersServeur.get(salonId)) ||
       (serveurId && this.serveurs.has(serveurId) ? serveurId : null) ||
-      // Par défaut, Chatvardage (le rail est trié par activité).
       (serveurs.find((serveur) => serveur.parDefaut) ?? serveurs[0])?.id;
     const actif = this.serveurs.get(actifId) ?? null;
 
-    // Rooms Socket.IO de TOUS les salons visibles de tous mes serveurs : les
-    // messages des autres serveurs allument leur pastille "non lu" du rail.
     for (const serveur of serveurs) {
       for (const salon of serveur.salons) {
         this.assurerAdhesionSocketSeulement(salon.id);
@@ -210,11 +174,6 @@ module.exports = {
     };
   },
 
-  /**
-   * Une page de membres d'un serveur (Room-Service), propriétaire en tête,
-   * avec pseudo, alias et photo déjà résolus (`utilisateurs`). `suivant` :
-   * décalage de la page suivante, ou null.
-   */
   async obtenirMembresServeur({
     serveurId,
     decalage = 0,
@@ -235,7 +194,6 @@ module.exports = {
     };
   },
 
-  /** Lesquels de `ids` sont déjà membres du serveur (fenêtre « Inviter »). */
   async membresParmi({ serveurId, ids }) {
     const uniques = [...new Set(ids ?? [])].filter(Boolean).slice(0, 100);
     if (uniques.length === 0) return [];
@@ -245,13 +203,10 @@ module.exports = {
     return page.membres.map((membre) => membre.utilisateurId);
   },
 
-  /** Rejoint la room Socket.IO d'un salon (l'appartenance est au serveur). */
   assurerAdhesionSocketSeulement(salonId) {
     this.salonsRejoints.add(salonId);
     this.rejoindreSocketSalon(salonId);
   },
-
-  // Serveurs ----------------------------------------------------------------
 
   async creerServeur({ nom, public: estPublic }) {
     return this.appelHttp('/api/servers', {
@@ -293,10 +248,6 @@ module.exports = {
     return { serveurId };
   },
 
-  /**
-   * Serveurs publics dont je ne suis pas membre (recherche par nom), par
-   * pages : `{ serveurs, total, suivant }`.
-   */
   async decouvrirServeurs(texte, decalage = 0) {
     const q = String(texte ?? '')
       .trim()
@@ -310,10 +261,6 @@ module.exports = {
     );
   },
 
-  /**
-   * Expulser le propriétaire (administrateur) exige `nouveauProprietaire`,
-   * le membre qui reprend le serveur.
-   */
   async expulserMembre({ serveurId, utilisateurId, nouveauProprietaire }) {
     const suite = nouveauProprietaire
       ? `?nouveauProprietaire=${encodeURIComponent(nouveauProprietaire)}`
@@ -352,8 +299,6 @@ module.exports = {
     );
     return { serveurId };
   },
-
-  // Salons ------------------------------------------------------------------
 
   async creerSalon({ serveurId, nom, acces, ecriture }) {
     const brut = await this.appelHttp(

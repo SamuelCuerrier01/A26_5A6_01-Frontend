@@ -4,22 +4,13 @@ import { validationPseudo } from '../../../domain/entities/Utilisateur';
 import { t, LANGUES_SUPPORTEES } from '../../../i18n/i18n-web';
 
 interface PseudoChoicePageProps {
-  /** Pseudo généré automatiquement par le backend à l'inscription (voir
-   * genererPseudoParDefaut côté domaine Utilisateur), pré-rempli ici pour que
-   * l'utilisateur⋅rice puisse le garder tel quel sans rien retaper. */
   pseudoInitial: string;
   langue: string;
   changerLangue: (langue: string) => void;
-  /** Appelé une fois cet écran terminé (pseudo changé OU "plus tard") — le
-   * parent (voir main.tsx) navigue alors vers le tableau de bord, exactement
-   * comme après une connexion normale. */
   onTermine: () => void;
 }
 
 interface ErreurSoumission {
-  /** Même convention que LoginPage.tsx/InscriptionPage.tsx : une clé de
-   * traduction locale ("auth.xxx") ou un code d'erreur backend brut
-   * ("ERR_XXX"), jamais un texte déjà traduit — voir traduireErreurSoumission. */
   cle: string;
 }
 
@@ -35,13 +26,6 @@ function traduireErreurSoumission(
   return brutTraduit === cleTraduction ? t(langue, 'errors.generic') : brutTraduit;
 }
 
-/**
- * Electron préfixe systématiquement toute erreur venant d'un handler IPC
- * (voir nettoyerPrefixeIpc dans main.tsx) — dupliqué ici car cet écran
- * appelle `window.electronAPI.profilModifierPseudo` directement plutôt que
- * via un contrat GatewaySession/GatewayInscription construit dans main.tsx
- * (qui, lui, nettoie déjà ce préfixe avant de relancer l'erreur).
- */
 function nettoyerPrefixeIpc(err: unknown): string {
   if (!(err instanceof Error)) return '';
   return err.message.replace(
@@ -50,14 +34,6 @@ function nettoyerPrefixeIpc(err: unknown): string {
   );
 }
 
-
-/**
- * Écran "Choisis ton pseudo", affiché juste après une inscription réussie
- * (voir main.tsx) — la page profil elle-même (accessible plus tard depuis le
- * tableau de bord) permet de rechanger le pseudo à tout moment, cet écran
- * n'est qu'une première occasion, jamais bloquante ("plus tard" mène
- * directement au tableau de bord sans rien changer).
- */
 export function PseudoChoicePage({
   pseudoInitial,
   langue,
@@ -82,8 +58,6 @@ export function PseudoChoicePage({
       }
 
       if (pseudoSaisi === pseudoInitial) {
-        // Rien à changer côté serveur : équivalent fonctionnel de "plus
-        // tard", pas la peine d'un aller-retour réseau pour ne rien modifier.
         onTermine();
         return;
       }
@@ -95,13 +69,6 @@ export function PseudoChoicePage({
         onTermine();
       } catch (err) {
         const brut = nettoyerPrefixeIpc(err);
-        // PATCH /auth/me répond 409 sur collision de pseudo (voir
-        // RealGatewayRuntime.appelHttp, qui lève un code générique
-        // "ERR_HTTP_<statut>" pour toute réponse HTTP en erreur — 409 est ici
-        // sans ambiguïté un pseudo déjà pris, le seul conflit possible sur
-        // cet endpoint pour ce champ) : on le traduit spécifiquement plutôt
-        // que de tomber sur le message générique "Une erreur est survenue."
-        // Réutilise auth.taken, déjà prévu pour ce message exact.
         const cle = brut === 'ERR_HTTP_409' ? 'auth.taken' : brut;
         setErreurSoumission({ cle });
         setEnCours(false);
@@ -130,7 +97,6 @@ export function PseudoChoicePage({
           </button>
         ))}
       </div>
-
 
       <div className="login-brand">ChatVardage</div>
       <form className="login-card" onSubmit={handleSubmit} noValidate>

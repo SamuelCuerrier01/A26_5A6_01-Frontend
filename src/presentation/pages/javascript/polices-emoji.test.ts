@@ -2,8 +2,6 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Emoji en couleur sous Linux/WSL (aucune police emoji installée) : police
-// Twemoji embarquée, servie par l'app (CSP default-src 'self').
 const pages = join(__dirname, '..');
 const lire = (fichier: string) => readFileSync(join(pages, fichier), 'utf8');
 
@@ -25,7 +23,6 @@ describe('police des emoji', () => {
     );
     expect(declaration).toContain("url('../fonts/twemoji.woff2')");
     expect(declaration).toContain('U+1F000-1FAFF');
-    // Les lettres et chiffres gardent la police du système.
     expect(declaration).not.toMatch(/U\+00?(2|3|4|5|6|7)\d/);
     expect(existsSync(join(pages, 'css', '../fonts/twemoji.woff2'))).toBe(true);
     for (const feuille of ['css/styles.css', 'css/message-prive.css']) {

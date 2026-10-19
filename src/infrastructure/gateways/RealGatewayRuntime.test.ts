@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error -- module CommonJS sans déclaration de types (voir son en-tête : exécuté par Electron sans étape de compilation).
 import { RealGatewayRuntime, creerDmId } from './RealGatewayRuntime.js';
 
-/** Construit une fausse Response minimale compatible avec l'usage de `appelHttp`. */
 function reponseJson(corps: unknown, statut = 200) {
   return {
     ok: statut >= 200 && statut < 300,
@@ -21,7 +20,6 @@ function creerFauxSocket() {
       ecouteurs.set(evenement, liste);
     },
     emit: vi.fn(),
-    // socket.timeout(ms).emit(...) : même socket, `emit` reste espionnable.
     timeout: vi.fn(function (this: unknown) {
       return this;
     }),
@@ -163,9 +161,6 @@ describe('RealGatewayRuntime', () => {
         .mockResolvedValueOnce(
           reponseJson({ jeton: 'jwt-2', utilisateur: UTILISATEUR_BRUT })
         )
-        // Appel supplémentaire best-effort déclenché par demarrerPollPresence()
-        // juste après l'ouverture de session (voir ouvrirSession) : non
-        // pertinent pour ce test, on lui donne juste une réponse valide.
         .mockResolvedValue(reponseJson({ statutPresence: 'enLigne' }));
       vi.stubGlobal('fetch', fetchMock);
 
@@ -197,7 +192,6 @@ describe('RealGatewayRuntime', () => {
           pseudo: 'pris',
         })
       ).rejects.toMatchObject({
-        // Pas ERR_HTTP_409, traduit « Ce pseudo est déjà pris ».
         message: 'ERR_COURRIEL_DEJA_UTILISE',
         statut: 409,
       });
@@ -473,7 +467,6 @@ describe('RealGatewayRuntime', () => {
       expect(url).toBe('http://gateway.test/api/auth/logout-others');
       expect(options.method).toBe('POST');
       expect(options.headers.Authorization).toBe('Bearer ancien');
-      // Pendant le remplacement, un refus de l'ancien jeton ne ferme rien.
       expect(pendantAppel).toBe(true);
       expect(runtime.rotationJetonEnCours).toBe(false);
       expect(runtime.jeton).toBe('nouveau');
@@ -515,8 +508,6 @@ describe('RealGatewayRuntime', () => {
       const { runtime } = creerRuntime();
       runtime.jeton = 'jwt';
       runtime.utilisateurConnecte = { id: 'u1', pseudo: 'ariane' };
-      // Serveurs et activité des salons : deux requêtes, retenues jusqu'après
-      // la déconnexion.
       const repondres: ((valeur: unknown) => void)[] = [];
       vi.stubGlobal(
         'fetch',
@@ -665,7 +656,6 @@ describe('RealGatewayRuntime', () => {
           invitePar: 'u9',
         },
       ]);
-      // Historique chargé seulement pour les salons du serveur actif.
       const historiques = fetchMock.mock.calls.filter(([url]) =>
         String(url).includes('/history')
       );
@@ -707,7 +697,6 @@ describe('RealGatewayRuntime', () => {
       socket._declencher('session.revoquee');
       expect(verifier).toHaveBeenCalledTimes(1);
 
-      // Socket remplacé : l'événement tardif de l'ancien est ignoré.
       runtime.socket = null;
       socket._declencher('session.revoquee');
       expect(verifier).toHaveBeenCalledTimes(1);
@@ -788,7 +777,6 @@ describe('RealGatewayRuntime', () => {
         ([url]) => new URL(url).searchParams.get('ids')!.split(',').length
       );
       expect(tailles).toEqual([100, 100, 5]);
-      // Le lot en erreur n'empêche pas les autres d'être résolus.
       expect(runtime.utilisateursConnus.get('u0')?.pseudo).toBe('p-u0');
       expect(runtime.utilisateursConnus.has('u100')).toBe(false);
       expect(runtime.utilisateursConnus.get('u204')?.pseudo).toBe('p-u204');
@@ -1004,7 +992,6 @@ describe('RealGatewayRuntime', () => {
         ],
         curseurSuivant: 'suite',
       });
-      // Modifiables / supprimables depuis l'app ensuite (index local).
       expect(runtime.indexMessages.get('ms')).toEqual({
         type: 'salon',
         roomId: 'r1',
@@ -1363,7 +1350,6 @@ describe('RealGatewayRuntime', () => {
 
       await runtime.chargerProfilsPublics(['u2', 'u3', 'u1']);
 
-      // Jamais soi-même dans la requête.
       expect(fetchMock.mock.calls[0][0]).toBe(
         'http://gateway.test/api/config-utilisateur/publiques?ids=u2,u3'
       );
@@ -1493,7 +1479,6 @@ describe('RealGatewayRuntime', () => {
       return runtime;
     }
 
-    // Répond selon l'URL, comme le Gateway réel.
     function routes(table: Record<string, unknown>) {
       return vi.fn().mockImplementation((url: string) => {
         const chemin = url.replace('http://gateway.test', '').split('?')[0];
@@ -1521,7 +1506,6 @@ describe('RealGatewayRuntime', () => {
         ],
         '/api/servers/s1/members': page(['u1', 'u2']),
         '/api/servers/s2/members': page(['u3', 'u2']),
-        // s3 : réponse sans membres ; s4 : panne réseau (ignorée).
         '/api/users/lookup': [
           { id: 'u2', pseudo: 'zed' },
           { id: 'u3', pseudo: 'bob' },
@@ -1540,7 +1524,6 @@ describe('RealGatewayRuntime', () => {
 
       const suggestions = await runtime.obtenirSuggestionsDm();
 
-      // Trié par nom affiché (alias prioritaire) : Alice, bob, carl.
       expect(suggestions.map((u: { id: string }) => u.id)).toEqual([
         'u2',
         'u3',
@@ -1551,7 +1534,6 @@ describe('RealGatewayRuntime', () => {
         alias: 'Alice',
         present: true,
       });
-      // Seulement les premiers membres de chaque serveur.
       expect(
         fetchMock.mock.calls.some(([url]) =>
           String(url).endsWith('/api/servers/s1/members?limite=20')
@@ -1664,7 +1646,6 @@ describe('RealGatewayRuntime', () => {
       expect(fetchMock.mock.calls[0][0]).toBe(
         'http://gateway.test/api/users/search?q=ar&limit=20'
       );
-      // Soi-même retiré des résultats.
       expect(resultats.map((u: { id: string }) => u.id)).toEqual(['u5']);
       expect(runtime.utilisateursConnus.has('u5')).toBe(true);
     });
@@ -1684,7 +1665,6 @@ describe('RealGatewayRuntime', () => {
       runtime.jeton = 'jwt';
       runtime.utilisateurConnecte = { id: 'moi', pseudo: 'moi' };
       runtime.connecterSocket();
-      // Socket authentifié côté Message-Service.
       socket._declencher('connexion.prete');
       return { runtime, socket };
     }
@@ -1709,7 +1689,6 @@ describe('RealGatewayRuntime', () => {
       socket._declencher('presence.changed', null);
 
       expect(runtime.presences.u2).toBe('en-ligne');
-      // Un seul événement : doublon et payloads invalides ignorés.
       expect(recues).toEqual([
         expect.objectContaining({ utilisateurId: 'u2', statut: 'en-ligne' }),
       ]);
@@ -1734,12 +1713,10 @@ describe('RealGatewayRuntime', () => {
       await runtime.chargerProfilsPublics(['u2'], { inclureAvatar: false });
       expect(runtime.presences.u2).toBe('hors-ligne');
 
-      // Passé ce délai, le serveur fait de nouveau foi.
       vi.advanceTimersByTime(100_001);
       await runtime.chargerProfilsPublics(['u2'], { inclureAvatar: false });
       expect(runtime.presences.u2).toBe('en-ligne');
 
-      // Un retour « en ligne » en temps réel lève la priorité aussitôt.
       socket._declencher('presence.changed', {
         userId: 'u2',
         statut: 'hors-ligne',
@@ -1764,8 +1741,6 @@ describe('RealGatewayRuntime', () => {
       });
 
       socket.emit.mockClear();
-      // 'connect' seul ne suffit pas : le serveur refuserait l'annonce tant
-      // que le socket n'est pas authentifié ('connexion.prete').
       socket._declencher('connect');
       expect(socket.emit).not.toHaveBeenCalledWith(
         'presence.update',
@@ -1780,7 +1755,7 @@ describe('RealGatewayRuntime', () => {
     it("l'instantané met hors ligne les connus absents de la liste (partis juste avant)", () => {
       const { runtime } = runtimeConnecte();
       runtime.enregistrerUtilisateurConnu({ id: 'parti', pseudo: 'parti' });
-      runtime.presences.parti = 'en-ligne'; // vu en ligne par le sondage
+      runtime.presences.parti = 'en-ligne';
       runtime.presences.moi = 'en-ligne';
       const recues: unknown[] = [];
       runtime.on('presence', (p: unknown) => recues.push(p));
@@ -1790,7 +1765,7 @@ describe('RealGatewayRuntime', () => {
       expect(runtime.presences).toMatchObject({
         parti: 'hors-ligne',
         present: 'en-ligne',
-        moi: 'en-ligne', // sa propre présence n'est pas touchée
+        moi: 'en-ligne',
       });
       expect(recues).toHaveLength(2);
     });
@@ -1816,7 +1791,6 @@ describe('RealGatewayRuntime', () => {
         present: 'en-ligne',
       });
 
-      // Les événements suivants tiennent la liste à jour.
       socket._declencher('presence.changed', {
         userId: 'parti',
         statut: 'en-ligne',
@@ -1859,7 +1833,6 @@ describe('RealGatewayRuntime', () => {
         vi.useRealTimers();
       });
 
-      // Socket pas encore connecté (contrairement à runtimeConnecte).
       const preparer = () => {
         const { runtime, socket } = creerRuntime();
         runtime.jeton = 'jwt';
@@ -1886,7 +1859,6 @@ describe('RealGatewayRuntime', () => {
           u3: 'hors-ligne',
         });
 
-        // Même liste : rien n'est renvoyé.
         runtime.suivrePresence();
         expect(appelsSuivre(socket)).toHaveLength(1);
       });
@@ -1907,7 +1879,6 @@ describe('RealGatewayRuntime', () => {
         expect(appelsSuivre(socket)).toHaveLength(2);
         expect(appelsSuivre(socket)[1][1]).toEqual({ ids: ['a', 'b'] });
 
-        // Refus (trop rapproché) : redemandé plus tard.
         appelsSuivre(socket)[1][2](new Error('timeout'));
         vi.advanceTimersByTime(1100);
         expect(appelsSuivre(socket)).toHaveLength(3);
@@ -1966,7 +1937,6 @@ describe('RealGatewayRuntime', () => {
       runtime.jeton = 'jwt';
       runtime.utilisateurConnecte = { id: 'moi', pseudo: 'moi' };
       runtime.connecterSocket();
-      // Socket authentifié côté Message-Service.
       socket._declencher('connexion.prete');
       return { runtime, socket };
     }
@@ -2149,8 +2119,6 @@ describe('RealGatewayRuntime', () => {
   });
 
   describe('reconnexion automatique', () => {
-    // Un socket neuf à chaque tentative, pour vérifier qu'une reconnexion
-    // ouvre bien un nouveau socket.
     function creerRuntimeMultiSockets() {
       const sockets: ReturnType<typeof creerFauxSocket>[] = [];
       const runtime = new RealGatewayRuntime(
@@ -2260,7 +2228,6 @@ describe('RealGatewayRuntime', () => {
       sockets[0]._declencher('connect_error', new Error('x'));
       runtime.reconnecterMaintenant();
       expect(sockets).toHaveLength(2);
-      // L'ancienne tentative planifiée est annulée.
       vi.advanceTimersByTime(1000);
       expect(sockets).toHaveLength(2);
     });

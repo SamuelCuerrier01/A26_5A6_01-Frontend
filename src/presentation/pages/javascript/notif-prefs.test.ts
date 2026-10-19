@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-// Script classique : s'enregistre sur window.NotifPrefs.
 import './notif-prefs.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
@@ -42,7 +41,7 @@ describe('NotifPrefs : aperçu dans les notifications système', () => {
     expect(NotifPrefs.afficheApercu('u2')).toBe(true);
     NotifPrefs.definirApercu('u1', true);
     expect(NotifPrefs.afficheApercu('u1')).toBe(true);
-    NotifPrefs.definirApercu(null, false); // sans utilisateur : ignoré
+    NotifPrefs.definirApercu(null, false);
   });
 
   it('masque le contenu envoyé à la notification système si demandé', async () => {
@@ -110,7 +109,6 @@ describe('NotifPrefs : compteurs de non-lus (copie de Message-Service)', () => {
       NotifPrefs.totalNonLus({ type: 'salon', conversationIds: ['s1', 's3'] })
     ).toBe(2);
 
-    // Réponse vide : tout est remis à zéro.
     await NotifPrefs.chargerNonLus(api(null));
     expect(NotifPrefs.totalNonLus()).toBe(0);
   });
@@ -204,7 +202,7 @@ describe('NotifPrefs : compteurs de non-lus (copie de Message-Service)', () => {
     expect([element.hidden, element.textContent]).toEqual([true, '']);
     NotifPrefs.remplirCompteur(element, 0);
     expect(element.hidden).toBe(true);
-    NotifPrefs.remplirCompteur(null, 3); // sans élément : rien
+    NotifPrefs.remplirCompteur(null, 3);
     expect(NotifPrefs.libelleNonLus(99)).toBe('99');
   });
 });
@@ -426,13 +424,11 @@ it.each(['salon', 'prive'])(
     NotifPrefs.marquerLu(serveur, type, conversationId, options);
     await vi.waitFor(() => expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(1));
     expect(serveur.marquerConversationLue).toHaveBeenLastCalledWith({ type, conversationId, messageId: 'affiche-1' });
-    // Le compteur peut connaître un message dont le rendu n'a pas encore eu lieu.
     NotifPrefs.ajouterNonLu(type, conversationId);
     resoudre({ nonLus: 1 });
     await vi.waitFor(() => expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(1));
     await new Promise((r) => setTimeout(r, 0));
     expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(1);
-    // Le rendu suivant fournit une nouvelle borne, même pendant le PUT.
     let terminer!: (valeur: { nonLus: number }) => void;
     serveur.marquerConversationLue.mockImplementationOnce(() => new Promise((r) => { terminer = r; }));
     NotifPrefs.marquerLu(serveur, type, conversationId, { ...options, messageId: 'affiche-2' });

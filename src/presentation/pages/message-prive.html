@@ -10,8 +10,6 @@
     <title>ChatVardage — Messages privés</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="css/message-prive.css" />
-    <!-- Chargé AVANT le premier rendu : applique le thème mémorisé (voir
-         theme-browser.js), sinon flash du thème sombre à la navigation. -->
     <script src="javascript/theme-browser.js"></script>
   </head>
   <body>
@@ -35,9 +33,6 @@
         <span class="notif-dot notif-dot--rail" hidden></span>
       </button>
       <div class="rail-divider"></div>
-      <!-- Icônes des serveurs insérées ici par message-prive.js
-           (ChatUiShared.afficherRailServeurs) ; un clic ouvre ce serveur sur
-           la page des salons. -->
       <button
         id="open-create-channel-rail"
         class="server-icon server-icon--add"
@@ -87,8 +82,6 @@
         aria-label="Liste des conversations privées"
       ></ul>
       <div id="user-panel">
-        <!-- Photo (ou initiale) + pastille de présence : voir
-             ChatUiShared.afficherAvatarCourant. -->
         <div id="current-user-avatar" class="avatar user-avatar"></div>
         <div class="user-info">
           <div class="current-user-row">
@@ -263,9 +256,6 @@
         <div class="dm-user">
           <div class="avatar topbar-avatar"></div>
           <div>
-            <!-- Remplis par message-prive.js (afficherAucuneConversation /
-                 renderActiveConversation) : vides au départ pour ne pas
-                 afficher un faux état le temps du chargement. -->
             <div class="user-name"></div>
             <div class="user-status"></div>
           </div>
@@ -362,12 +352,9 @@
       </form>
     </dialog>
 
-    <!-- Recherche de messages (ChatUiShared.brancherRechercheMessages) :
-         dans le salon ou la conversation privée affichée. -->
     <dialog id="search-dialog" class="search-dialog">
       <div class="search-panel">
         <div class="dialog-header">
-          <!-- Rempli à l'ouverture : « Rechercher dans <conversation> ». -->
           <h2 class="search-title">Rechercher dans les messages</h2>
           <button
             type="button"

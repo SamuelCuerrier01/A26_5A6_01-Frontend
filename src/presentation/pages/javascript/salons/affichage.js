@@ -1,21 +1,3 @@
-// salons/affichage.js — Rendu : outils DOM, libellés, liste des salons, messages, actions, badges.
-//
-// Page des salons (index.html), découpée en scripts classiques chargés dans
-// l'ordre par index.html : etat → historique → affichage → dialogues →
-// session → temps-reel → renderer.js (démarrage). Ils partagent la même
-// portée globale (const/let/fonctions de haut niveau) : un fichier peut
-// utiliser ce qu'un autre définit, à condition que ce ne soit pas pendant
-// son propre chargement — seul renderer.js, chargé en dernier, lance quoi
-// que ce soit (voir aussi salons.chargement.test.ts, qui vérifie ce contrat).
-
-/**
- * Crée un élément DOM avec ses attributs, son contenu texte et ses enfants.
- * Petite fabrique pour éviter la répétition de document.createElement / for
- * loops dans chaque gabarit, sans jamais passer par innerHTML.
- *
- * @param {string} tag
- * @param {{classe?: string, texte?: string, attrs?: Record<string,string>, dataset?: Record<string,string>, enfants?: (Node|null|undefined)[]}} [options]
- */
 function creerEl(tag, options = {}) {
   const { classe, texte, attrs, dataset, enfants } = options;
   const element = document.createElement(tag);
@@ -39,11 +21,6 @@ function creerEl(tag, options = {}) {
   return element;
 }
 
-// Icône de cadenas en SVG : l'emoji 🔒 ne s'affiche pas de façon fiable dans
-// Electron selon les polices installées sur le système (tofu box). Un SVG
-// inline s'affiche toujours, quelle que soit la plateforme. Construite via
-// createElementNS (jamais de chaîne HTML) ; un nœud DOM ne pouvant vivre
-// qu'à un seul endroit à la fois, on en fabrique un nouveau à chaque appel.
 function creerIconeCadenas() {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -63,10 +40,6 @@ function creerIconeCadenas() {
   return svg;
 }
 
-// Icône de main qui salue, même logique que creerIconeCadenas ci-dessus :
-// l'emoji 👋 est lui aussi une tofu box sur certains systèmes (voir le
-// signalement dans #22), donc on le remplace par ce SVG inline plutôt que
-// de dépendre d'une police d'émojis installée sur la machine.
 function creerIconeMain() {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -97,18 +70,8 @@ function creerIconeMain() {
   return svg;
 }
 
-// Table des emoji connus pour ne pas s'afficher de façon fiable en Electron
-// (tofu box) et remplacés par un SVG inline équivalent. Étendre cette table
-// (plutôt que d'ajouter du texte emoji brut ailleurs) si d'autres emoji sont
-// utilisés plus tard dans les messages.
 const EMOJI_VERS_ICONE = { '👋': creerIconeMain };
 
-/**
- * Remplit `element` avec le texte d'un message, en remplaçant au passage
- * tout emoji connu de EMOJI_VERS_ICONE par son icône SVG (voir
- * creerIconeCadenas/creerIconeMain) : le reste du texte passe par
- * createTextNode, donc aucun risque XSS (jamais d'innerHTML).
- */
 function remplirTexteMessage(element, texte) {
   element.replaceChildren();
   const emojiConnus = Object.keys(EMOJI_VERS_ICONE);
@@ -122,25 +85,16 @@ function remplirTexteMessage(element, texte) {
   }
 }
 
-/** Nom affiché d'un salon : traduit pour les salons par défaut du serveur
- * « Chatvardage » (voir LogiqueInterface.cleNomSalon), sinon le nom saisi
- * par l'utilisateur, tel quel. */
 function nomSalon(salon) {
   const cle = LogiqueInterface.cleNomSalon(salon);
   return cle ? t(cle) : salon.nom;
 }
 
-/** Contenu affiché d'un message : le message de bienvenue est traduit tant
- * qu'il n'a pas été modifié (voir LogiqueInterface.cleContenuMessage). */
 function contenuMessage(message) {
   const cle = LogiqueInterface.cleContenuMessage(message);
   return cle ? t(cle) : message.contenu;
 }
 
-/**
- * Remplit un élément avec l'icône (salon privé) ou "#" (salon public) suivi
- * du nom du salon (voir nomSalon).
- */
 function remplirLabelSalon(element, salon) {
   if (salon.visibilite === 'prive') {
     element.replaceChildren(
@@ -159,11 +113,6 @@ function notifier(message, erreur = false) {
   window.setTimeout(() => el.toast.classList.remove('visible'), 2600);
 }
 
-/**
- * Ouvre la boîte de dialogue générique avec un titre et un contenu.
- * @param {string} titre
- * @param {Node|Node[]} contenu Un nœud DOM déjà construit, ou une liste de nœuds frères.
- */
 function ouvrirDialogue(titre, contenu) {
   el.titreDialogue.textContent = titre;
   el.contenuDialogue.replaceChildren(
@@ -172,22 +121,14 @@ function ouvrirDialogue(titre, contenu) {
   el.dialogue.showModal();
 }
 
-/**
- * Affiche l'utilisateur connecté (pseudo en lecture seule + badge de rôle) :
- * une seule identité par session (le compte JWT, voir
- * initialiserUtilisateurCourant).
- */
 function afficherUtilisateurCourant() {
   if (el.utilisateurPseudo) {
-    // L'alias (nom d'affichage choisi dans le profil) remplace le pseudo
-    // s'il est défini ; le pseudo reste visible au survol.
     const pseudo = utilisateurActuel?.pseudo ?? '';
     el.utilisateurPseudo.textContent = preferences?.alias || pseudo;
     el.utilisateurPseudo.title = preferences?.alias ? `@${pseudo}` : '';
   }
   afficherPresenceCourante();
   if (el.utilisateurRoleBadge) {
-    // Rôle dans le serveur affiché (l'admin global reste « Admin »).
     const role = roleActuel();
     const cleRole =
       role === 'admin'
@@ -203,7 +144,6 @@ function afficherUtilisateurCourant() {
   }
 }
 
-/** Affiche un autre serveur (clic sur son icône du rail). */
 async function changerServeur(serveurId) {
   if (serveurId === serveurActifId) return;
   serveurActifId = serveurId;
@@ -228,17 +168,9 @@ async function actualiser(options = {}) {
     console.error('[actualiser] ERREUR:', erreur);
     notifier(messageErreur(erreur), true);
   }
-  // Note : mettreAJourBadgeApplication() n'est PAS rappelée ici, elle est
-  // déjà déclenchée par afficherTout() (voir plus bas) sur le chemin de
-  // succès.
   actualiserBadgeMessagesPrives();
 }
 
-/**
- * Badge de l'icône de l'app : total des messages non lus (salons + messages
- * privés, compteurs tenus par Message-Service, voir NotifPrefs). Masqué en
- * mode de notification « aucune », comme les compteurs.
- */
 function mettreAJourBadgeApplication() {
   if (typeof serviceNotifications?.setBadgeCount !== 'function') return;
   NotifPrefs.appliquerBadge(
@@ -247,10 +179,6 @@ function mettreAJourBadgeApplication() {
   );
 }
 
-/**
- * Rond du bouton des messages privés (#message-prive-btn) : au moins un
- * message privé non lu.
- */
 function actualiserBadgeMessagesPrives() {
   const nonLu =
     NotifPrefs.afficheRonds(utilisateurActuelId) &&
@@ -260,8 +188,6 @@ function actualiserBadgeMessagesPrives() {
     .forEach((dot) => (dot.hidden = !nonLu));
 }
 
-/** Serveurs du rail ayant au moins un salon non lu. */
-/** Nombre de non-lus de chaque serveur (somme de ses salons), pour le rail. */
 function serveursAvecNonLus() {
   if (!NotifPrefs.afficheRonds(utilisateurActuelId)) return new Map();
   return new Map(
@@ -335,10 +261,6 @@ function creerActionsMessage(message, texteEl, peutModifier = true) {
 }
 
 function afficherMessages(options = {}) {
-  // conserverPositionScroll : contenu inséré EN HAUT (historique plus
-  // ancien), la vue est recalée pour ne pas bouger. garderScroll : contenu
-  // ajouté EN BAS (message reçu), la position est gardée telle quelle. Sinon :
-  // défilement tout en bas.
   const { conserverPositionScroll = false, garderScroll = false } = options;
   const salon = salonActif();
   if (!salon) {
@@ -347,17 +269,8 @@ function afficherMessages(options = {}) {
     el.prive.hidden = true;
     el.message.disabled = true;
     if (el.envoyer) el.envoyer.disabled = true;
-    // channels.sendMessagePlaceholder attend un paramètre {name} (voir plus
-    // bas) : il n'est donc PAS dans le balayage générique data-i18n-*
-    // (appliquerTraductionsStatiques), qui appelle t() sans paramètres.
-    // Cette branche doit donc gérer elle-même la traduction du placeholder,
-    // sous peine de laisser affiché le texte brut du HTML statique
-    // ("Envoyez un message dans #général") tant qu'aucun salon n'est
-    // accessible.
     el.message.placeholder = t('channels.noChannelAccessible');
     definirConversationActivePourNotifs(null);
-    // Plus aucun salon affiché : l'historique manuellement remonté n'a plus
-    // de sens à conserver (voir sa déclaration plus haut).
     etatHistoriqueSalon = {
       salonId: null,
       messagesAnciens: [],
@@ -367,12 +280,7 @@ function afficherMessages(options = {}) {
     return;
   }
 
-  // Changement de salon actif : on repart d'un historique manuel vide (voir
-  // la déclaration de etatHistoriqueSalon plus haut). `finHistorique` part de
-  // la page récente tout juste reçue (salon.finHistorique, voir
-  // RealGatewayRuntime.js).
   if (etatHistoriqueSalon.salonId !== salon.id) {
-    // Avant le marquage comme lu plus bas, qui remet le compteur à zéro.
     separateurSalon = {
       salonId: salon.id,
       nonLus: NotifPrefs.nombreNonLus('salon', salon.id),
@@ -385,55 +293,16 @@ function afficherMessages(options = {}) {
       enChargement: false,
     };
   } else if (etatHistoriqueSalon.messagesAnciens.length === 0) {
-    // Même salon, mais rien d'ancien encore chargé manuellement : c'est
-    // toujours la page récente qui fait foi pour finHistorique (une fois au
-    // moins une page plus ancienne chargée, c'est chargerMessagesPlusAnciensSalon
-    // qui la met à jour à sa place, voir plus bas).
     etatHistoriqueSalon.finHistorique = Boolean(salon.finHistorique);
   }
-  // Le salon affiché est "lu" par l'utilisateur courant — mais SEULEMENT si
-  // la fenêtre a effectivement le focus en ce moment (fenetreEstFocusee) :
-  // sans ce garde-fou, un message de démo/réel reçu pendant que la fenêtre
-  // est en arrière-plan (mais que ce salon était déjà sélectionné) serait
-  // marqué "lu" ici alors même qu'une vraie notification système vient
-  // d'être déclenchée pour ce même message côté main.js (qui, lui, exige
-  // déjà fenetreEstFocusee avant de considérer une conversation comme
-  // "déjà lue en direct" — voir showMessageNotification). Les deux
-  // indicateurs (rond de notification ici, notification système côté
-  // main.js) doivent rester d'accord entre eux.
-  // La conversation "active" que main.js ne doit pas notifier (voir
-  // showMessageNotification côté main.js) reste définie qu'on ait le focus
-  // ou non : c'est ce salon qui est affiché à l'écran, peu importe si la
-  // fenêtre est actuellement au premier plan.
   definirConversationActivePourNotifs(salon.id);
   remplirLabelSalon(el.nomSalon, salon);
   el.prive.hidden = salon.visibilite !== 'prive';
-  // Le champ de saisie reste actif même hors ligne (voir ChatUiShared.
-  // afficherEtatReseau, qui ne le désactive plus que si aucun salon n'est
-  // sélectionné) : un message tapé sans connexion est affiché comme "non
-  // livré" avec réessayer/supprimer plutôt que d'empêcher la saisie.
-  // On rappelle explicitement afficherEtatReseau() ici : salonActifId vient
-  // tout juste d'être fixé par actualiser() (voir plus haut dans ce
-  // fichier), donc composerAutorise — calculé à partir de salonActifId —
-  // n'a encore jamais été recalculé avec CE salon. Sans cet appel, le
-  // premier chargerEtatReseauEtPresences() au démarrage (voir initialiser())
-  // a déjà figé messageInput/submitButton sur `disabled = true` (aucun salon
-  // actif à ce moment-là), et rien ne les réactivait plus jamais ensuite.
   afficherEtatReseau();
   el.message.placeholder = salon.peutEcrire
     ? t('channels.sendMessagePlaceholder', { name: nomSalon(salon) })
     : t('channels.readOnlyPlaceholder');
 
-  // Page récente (salon.messages) + historique manuellement remonté (voir
-  // chargerMessagesPlusAnciensSalon) : voir fusionnerHistorique plus haut.
-  // Les messages non livrés du salon (voir messagesEnAttenteSalon) sont
-  // fusionnés puis triés avec le reste par `date` plutôt que simplement
-  // ajoutés à la suite : ils ne sont PAS garantis d'être les plus récents —
-  // actualiser() peut faire apparaître un message réel plus récent pendant
-  // qu'un brouillon plus ancien est toujours en attente (ou en cours de
-  // renvoi), et deux messages en attente peuvent être retentés dans le
-  // désordre. Un simple append donnerait alors un ordre chronologiquement
-  // faux.
   const messagesEnAttenteDuSalon = obtenirMessagesEnAttenteSalon(salon.id);
   if (etatHistoriqueSalon.sautEnCours) {
     ChatUiShared.afficherChargementRecherche(el.messages, t);
@@ -450,24 +319,12 @@ function afficherMessages(options = {}) {
       : salon.messages,
     'date'
   );
-  // fusionnerHistorique() renvoie déjà un tableau trié par date : pas besoin
-  // de re-trier l'ensemble à chaque rendu quand il n'y a aucun message en
-  // attente (le cas de loin le plus fréquent). Quand il y en a, on fusionne
-  // au lieu de tout retrier (voir fusionnerAvecMessagesEnAttente) : sinon
-  // TOUT l'historique du salon serait retrié à chaque rendu tant qu'un seul
-  // brouillon reste en attente — y compris pour des rendus qui n'ont rien à
-  // voir avec lui (indicateur de saisie, etc.).
   const tousLesMessages = fusionnerAvecMessagesEnAttente(
     messagesHistorique,
     messagesEnAttenteDuSalon,
     'date'
   );
 
-  // Mémorise la position de défilement AVANT de reconstruire la liste : sans
-  // ça, remplacer le contenu de #message-list (replaceChildren) réinitialise
-  // implicitement son scroll, ce qui ferait sauter la vue tout en haut à
-  // chaque chargement de messages plus anciens (voir conserverPositionScroll
-  // ci-dessous et chargerMessagesPlusAnciensSalon).
   const hauteurAvant = el.messages.scrollHeight;
   const scrollAvant = el.messages.scrollTop;
 
@@ -478,10 +335,6 @@ function afficherMessages(options = {}) {
     .at(-1);
 
   if (!tousLesMessages.length) {
-    // Conversation réellement vide (rien à charger, ni de récent ni
-    // d'ancien) : la barre d'historique ("Fin de l'historique"/bouton)
-    // n'apporte rien de plus que l'état vide ci-dessous, donc on ne l'affiche
-    // pas dans ce cas précis.
     el.messages.appendChild(
       creerEl('p', {
         classe: 'empty-state',
@@ -530,16 +383,12 @@ function afficherMessages(options = {}) {
         classe: 'avatar',
         texte: auteur[0].toUpperCase(),
       });
-      // Sa propre photo vient des préférences (à jour en direct), celle des
-      // autres du profil public chargé par le gateway.
       ChatUiShared.remplirAvatar(
         avatarAuteur,
         estMessagePersonnel
           ? preferences?.avatar
           : utilisateur(message.auteurId)?.avatar
       );
-      // Photo d'un autre membre : sa fiche de profil (données lues au clic,
-      // à jour si son alias ou sa photo a changé entre-temps).
       if (!estMessagePersonnel && utilisateur(message.auteurId)) {
         ChatUiShared.rendreAvatarCliquable(avatarAuteur, {
           utilisateurId: message.auteurId,
@@ -561,14 +410,6 @@ function afficherMessages(options = {}) {
                   creerEl('span', { classe: 'author', texte: auteur }),
                   creerEl('span', {
                     classe: 'timestamp',
-                    // Heure courte (ex. "14:32") plutôt que toLocaleString(),
-                    // qui produit une date+heure complète très longue
-                    // ("2026-09-07 14 h 32 min 58 s" en fr-CA) : cette
-                    // longueur forçait la bulle entière à s'élargir pour
-                    // accueillir la ligne meta, même pour un message très
-                    // court comme "À plus tard !" (voir #22 - bug rapporté).
-                    // On aligne ici sur le format déjà utilisé côté messages
-                    // privés (voir timeLabel dans message-prive.js).
                     texte: new Date(message.date).toLocaleTimeString(
                       I18n.obtenirLangue() === 'en' ? 'en-CA' : 'fr-CA',
                       { hour: '2-digit', minute: '2-digit' }
@@ -595,8 +436,6 @@ function afficherMessages(options = {}) {
           ?.appendChild(creerActionsMessageNonLivre(message));
       } else if (
         estMessagePersonnel ||
-        // Un modérateur du serveur (ou son propriétaire, un admin) peut
-        // supprimer le message d'un autre, pas le modifier.
         ChatUiShared.peutModererServeur(roleActuel())
       ) {
         article
@@ -619,7 +458,6 @@ function afficherMessages(options = {}) {
           ),
           t
         );
-        // Juste sous le message, au-dessus de Modifier / Supprimer.
         if (vuPar) texteEl.after(ChatUiShared.creerLigneLecture(vuPar));
       }
       el.messages.appendChild(article);
@@ -640,11 +478,6 @@ function afficherMessages(options = {}) {
   if (garderScroll) {
     el.messages.scrollTop = scrollAvant;
   } else if (conserverPositionScroll) {
-    // Charger plus ancien insère du contenu EN HAUT de la liste : on
-    // recale le scroll pour que les messages déjà lus restent exactement où
-    // ils étaient à l'écran, plutôt que de laisser le navigateur (qui remet
-    // scrollTop à 0 après un replaceChildren) faire sauter la vue tout en
-    // haut, sur les tout nouveaux messages plus anciens.
     el.messages.scrollTop =
       el.messages.scrollHeight - hauteurAvant + scrollAvant;
   } else {
@@ -652,18 +485,6 @@ function afficherMessages(options = {}) {
   }
 }
 
-/**
- * Charge la page de messages plus anciens qui précède ceux déjà affichés
- * pour le salon actif (pagination "charger plus ancien" — voir
- * obtenirMessagesSalonAvant côté RealGatewayRuntime.js), et les fusionne
- * dans etatHistoriqueSalon avant de redemander un rendu qui préserve la
- * position de défilement (voir afficherMessages({ conserverPositionScroll })).
- * Sans effet si un chargement est déjà en cours, si l'historique du salon
- * actif est déjà entièrement remonté, ou si aucun salon n'est actif —
- * appelée aussi bien par le bouton (voir creerStatutHistorique) que par le
- * défilement automatique près du haut de la liste (voir l'écouteur 'scroll'
- * plus bas).
- */
 const paginationsEnCoursSalon = new Map();
 
 function chargerMessagesPlusAnciensSalon(options = {}) {
@@ -725,12 +546,6 @@ async function executerPaginationSalon({ taille } = {}) {
   }
 }
 
-// Déclenchement automatique du chargement de l'historique plus ancien en
-// s'approchant du haut de la liste (défilement "progressif", en plus du
-// bouton explicite — voir creerStatutHistorique) : chargerMessagesPlusAnciensSalon
-// est déjà protégée contre les appels superflus (chargement en cours,
-// historique déjà épuisé, aucun salon actif), donc pas de garde
-// supplémentaire nécessaire ici.
 el.messages.addEventListener('scroll', () => {
   if (el.messages.scrollTop < 80) {
     chargerMessagesPlusAnciensSalon();
@@ -741,21 +556,16 @@ function afficherActions() {
   const salon = salonActif();
   const serveur = etat.serveurActif;
   const role = roleActuel();
-  // Inviter : modérateur minimum (même règle que Room-Service), jamais dans
-  // Chatvardage (tout le monde y est déjà).
   el.inviter.hidden =
     !serveur || serveur.parDefaut || !ChatUiShared.peutModererServeur(role);
   el.membres.disabled = !serveur;
   el.compteur.textContent = String(etat.invitations.length);
   el.compteur.hidden = etat.invitations.length === 0;
 
-  // Créer / paramétrer un salon : modérateur du serveur minimum. Masqués
-  // plutôt que désactivés, pour ne pas proposer une action qui échouerait.
   if (el.creer) el.creer.hidden = !ChatUiShared.peutModererServeur(role);
   if (el.roomSettings) {
     el.roomSettings.hidden = !salon || !ChatUiShared.peutModererServeur(role);
   }
-  // « + » du rail : ajouter un serveur (créer ou rejoindre), pour tous.
   if (el.creerRail) el.creerRail.hidden = false;
   if (el.menuServeur) el.menuServeur.disabled = !serveur;
 }
@@ -770,19 +580,6 @@ function afficherTout(options = {}) {
   actualiserIndicateurSaisie();
 }
 
-// --- Initialisation au démarrage -----
-// Un seul appel à actualiser() au démarrage : il se fait via initialiser()
-// (salons/session.js, lancé par renderer.js), qui appelle d'abord
-// initialiserUtilisateurCourant()
-// pour résoudre le bon utilisateurActuelId avant de charger l'état des salons.
-// Un appel direct à actualiser() ici, en plus, chargeait l'état une première
-// fois avec un utilisateurActuelId potentiellement pas encore résolu, avant
-// d'être aussitôt écrasé par le second appel (double fetch + flash possible).
-
-/**
- * Lecteurs du salon `salonId` (« Vu par »), puis nouveau rendu s'il est
- * toujours affiché. Best-effort : sans réponse, rien n'est affiché.
- */
 async function chargerLecturesSalon(salonId) {
   const generation = ++generationLecturesSalon;
   if (lecturesSalon.salonId !== salonId)
@@ -817,11 +614,6 @@ async function chargerLecturesSalon(salonId) {
   }
 }
 
-/**
- * Accusé de lecture reçu en temps réel. Lu depuis un de mes autres
- * appareils : les compteurs sont relus. Lu par quelqu'un d'autre dans le
- * salon affiché : « Vu par » est mis à jour.
- */
 async function appliquerLecture(lecture) {
   if (lecture?.deMoi) {
     await NotifPrefs.chargerNonLus(window.electronAPI);
@@ -860,9 +652,6 @@ async function appliquerLecture(lecture) {
   afficherMessages({ garderScroll: true });
 }
 
-// Saut vers un message ancien (résultat de recherche) : pages plus grandes
-// que la pagination normale, et un plafond pour un très long historique.
-/** Charge une page depuis le resultat, sans parcourir l'historique. */
 async function allerAuMessageSalon(messageId) {
   const id = salonActifId;
   if (!id) return;
@@ -887,10 +676,6 @@ async function allerAuMessageSalon(messageId) {
     historique.messagesAnciens = resultat.messages;
     historique.finHistorique = resultat.finHistorique;
     historique.ancreId = messageId;
-    // `autourId` ne rend que la cible et les plus anciens : on ajoute une
-    // page de plus récents. Une petite conversation s'affiche en entier, et
-    // « Charger les messages plus récents » ne reste que s'il en manque
-    // (ou si ce chargement échoue).
     try {
       const suite = await window.electronAPI.obtenirMessagesSalonAvant({
         salonId: id,
