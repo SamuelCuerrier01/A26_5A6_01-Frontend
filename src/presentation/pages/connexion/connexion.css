@@ -191,7 +191,10 @@ body {
   gap: clamp(14px, 4vw, 22px);
 
   width: 100%;
-  min-height: calc(100vh - var(--titlebar-height) - var(--login-page-padding) - var(--login-page-padding));
+  min-height: calc(
+    100vh - var(--titlebar-height) - var(--login-page-padding) -
+      var(--login-page-padding)
+  );
 }
 
 .login-brand {

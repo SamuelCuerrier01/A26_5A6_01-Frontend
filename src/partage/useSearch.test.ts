@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchInput, SearchPage, SearchResult } from './search';
 import { useSearchResults } from './useSearch';
 
-const describeError = (error: unknown) => `raison : ${(error as Error).message}`;
+const describeError = (error: unknown) =>
+  `raison : ${(error as Error).message}`;
 const search = vi.fn<(input: SearchInput) => Promise<SearchPage>>();
 
 const result = (id: string): SearchResult => ({
@@ -23,10 +24,13 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-const setup = (conversationId?: string) => renderHook(() => useSearchResults({ search, describeError }, conversationId));
+const setup = (conversationId?: string) =>
+  renderHook(() => useSearchResults({ search, describeError }, conversationId));
 type Hook = ReturnType<typeof setup>;
-const type = (hook: Hook, text: string) => act(async () => hook.result.current.setQuery(text));
-const settle = () => act(async () => void (await vi.advanceTimersByTimeAsync(400)));
+const type = (hook: Hook, text: string) =>
+  act(async () => hook.result.current.setQuery(text));
+const settle = () =>
+  act(async () => void (await vi.advanceTimersByTimeAsync(400)));
 
 describe('useSearchResults', () => {
   it('reste inactif sans saisie, puis signale un texte trop court sans requête', async () => {
@@ -39,7 +43,10 @@ describe('useSearchResults', () => {
   });
 
   it('attend la fin de la frappe, puis affiche les résultats', async () => {
-    search.mockResolvedValue({ results: [result('a'), result('b')], nextCursor: 'c1' });
+    search.mockResolvedValue({
+      results: [result('a'), result('b')],
+      nextCursor: 'c1',
+    });
     const hook = setup();
     await type(hook, 'bo');
     expect(hook.result.current.status).toBe('loading');
@@ -48,7 +55,9 @@ describe('useSearchResults', () => {
     expect(search).not.toHaveBeenCalled();
     await settle();
     expect(search).toHaveBeenCalledTimes(1);
-    expect(search).toHaveBeenCalledWith(expect.objectContaining({ q: 'bon', conversationId: undefined }));
+    expect(search).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'bon', conversationId: undefined })
+    );
     expect(hook.result.current.status).toBe('ready');
     expect(hook.result.current.term).toBe('bon');
     expect(hook.result.current.results.map((r) => r.id)).toEqual(['a', 'b']);
@@ -72,7 +81,11 @@ describe('useSearchResults', () => {
     const hook = setup('dm:22222222-2222-4222-8222-222222222222');
     await type(hook, 'bonjour');
     await settle();
-    expect(search).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'dm:22222222-2222-4222-8222-222222222222' }));
+    expect(search).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'dm:22222222-2222-4222-8222-222222222222',
+      })
+    );
   });
 
   it("affiche la raison fournie par l'application et permet de réessayer", async () => {
@@ -92,7 +105,9 @@ describe('useSearchResults', () => {
 
   it("ignore la réponse d'une requête annulée par une saisie plus récente", async () => {
     let rejectFirst: (error: Error) => void = () => undefined;
-    search.mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)));
+    search.mockImplementationOnce(
+      () => new Promise((_, reject) => (rejectFirst = reject))
+    );
     search.mockResolvedValueOnce({ results: [result('b')], nextCursor: null });
     const hook = setup();
     await type(hook, 'premier');
@@ -106,14 +121,18 @@ describe('useSearchResults', () => {
 
   it("ignore aussi la réponse réussie d'une requête annulée par une saisie plus récente", async () => {
     let resolveFirst: (page: SearchPage) => void = () => undefined;
-    search.mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)));
+    search.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveFirst = resolve))
+    );
     search.mockResolvedValueOnce({ results: [result('b')], nextCursor: null });
     const hook = setup();
     await type(hook, 'premier');
     await settle();
     await type(hook, 'second');
     await settle();
-    await act(async () => resolveFirst({ results: [result('périmé')], nextCursor: null }));
+    await act(async () =>
+      resolveFirst({ results: [result('périmé')], nextCursor: null })
+    );
     expect(hook.result.current.results.map((r) => r.id)).toEqual(['b']);
   });
 
@@ -127,7 +146,7 @@ describe('useSearchResults', () => {
         },
         describeError: (error) => `Web : ${(error as Error).message}`,
         debounceMs: 50,
-      }),
+      })
     );
     await act(async () => hook.result.current.setQuery('bonjour'));
     await act(async () => void (await vi.advanceTimersByTimeAsync(20)));
@@ -142,7 +161,10 @@ describe('useSearchResults', () => {
 
 describe('useSearchResults : pagination', () => {
   const start = async () => {
-    search.mockResolvedValueOnce({ results: [result('a'), result('b')], nextCursor: 'c1' });
+    search.mockResolvedValueOnce({
+      results: [result('a'), result('b')],
+      nextCursor: 'c1',
+    });
     const hook = setup();
     await type(hook, 'bonjour');
     await settle();
@@ -151,10 +173,19 @@ describe('useSearchResults : pagination', () => {
 
   it("charge la page suivante sans doublon et s'arrête à la fin", async () => {
     const hook = await start();
-    search.mockResolvedValueOnce({ results: [result('b'), result('c')], nextCursor: null });
+    search.mockResolvedValueOnce({
+      results: [result('b'), result('c')],
+      nextCursor: null,
+    });
     await act(async () => hook.result.current.loadMore());
-    expect(search).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'bonjour', cursor: 'c1' }));
-    expect(hook.result.current.results.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+    expect(search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'bonjour', cursor: 'c1' })
+    );
+    expect(hook.result.current.results.map((r) => r.id)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
     expect(hook.result.current.hasMore).toBe(false);
     await act(async () => hook.result.current.loadMore());
     expect(search).toHaveBeenCalledTimes(2);
@@ -170,7 +201,9 @@ describe('useSearchResults : pagination', () => {
     });
     expect(search).toHaveBeenCalledTimes(2);
     expect(hook.result.current.loadingMore).toBe(true);
-    await act(async () => resolve({ results: [result('z')], nextCursor: null }));
+    await act(async () =>
+      resolve({ results: [result('z')], nextCursor: null })
+    );
     expect(hook.result.current.loadingMore).toBe(false);
   });
 
@@ -204,7 +237,9 @@ describe('useSearchResults : pagination', () => {
     search.mockResolvedValueOnce({ results: [result('n')], nextCursor: null });
     await type(hook, 'autre');
     await settle();
-    await act(async () => resolve({ results: [result('tard')], nextCursor: null }));
+    await act(async () =>
+      resolve({ results: [result('tard')], nextCursor: null })
+    );
     expect(hook.result.current.results.map((r) => r.id)).toEqual(['n']);
   });
 
@@ -229,8 +264,13 @@ describe('useSearchResults : pagination', () => {
 
   it("ignore les doublons à l'intérieur d'une même page suivante", async () => {
     const hook = await start();
-    search.mockResolvedValueOnce({ results: [result('x'), result('x')], nextCursor: null });
+    search.mockResolvedValueOnce({
+      results: [result('x'), result('x')],
+      nextCursor: null,
+    });
     await act(async () => hook.result.current.loadMore());
-    expect(hook.result.current.results.filter((r) => r.id === 'x')).toHaveLength(1);
+    expect(
+      hook.result.current.results.filter((r) => r.id === 'x')
+    ).toHaveLength(1);
   });
 });

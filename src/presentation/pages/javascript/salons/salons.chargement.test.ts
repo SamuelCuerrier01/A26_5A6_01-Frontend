@@ -496,7 +496,9 @@ describe('page des salons (scripts découpés)', () => {
     plus()!.click();
     expect(icones()).toHaveLength(20);
     expect(icones()[14].getAttribute('data-serveur-id')).toBe('srv');
-    expect(document.querySelectorAll('[data-serveur-id="srv"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-serveur-id="srv"]')).toHaveLength(
+      1
+    );
     plus()!.click();
     expect(icones()).toHaveLength(25);
     expect(plus()).toBeNull();
@@ -519,12 +521,24 @@ describe('page des salons (scripts découpés)', () => {
       autresReponses: { obtenirEtatSalons: etat },
     });
     await vi.waitFor(() =>
-      expect(document.querySelectorAll('#server-rail [data-serveur-id]')).toHaveLength(11)
+      expect(
+        document.querySelectorAll('#server-rail [data-serveur-id]')
+      ).toHaveLength(11)
     );
-    expect(document.querySelector('#server-rail [data-serveur-id="srv"]')?.classList.contains('active')).toBe(true);
-    document.querySelector<HTMLButtonElement>('#server-rail .server-icon--more')!.click();
-    expect(document.querySelectorAll('#server-rail [data-serveur-id]')).toHaveLength(15);
-    expect(document.querySelector('#server-rail .server-icon--more')).toBeNull();
+    expect(
+      document
+        .querySelector('#server-rail [data-serveur-id="srv"]')
+        ?.classList.contains('active')
+    ).toBe(true);
+    document
+      .querySelector<HTMLButtonElement>('#server-rail .server-icon--more')!
+      .click();
+    expect(
+      document.querySelectorAll('#server-rail [data-serveur-id]')
+    ).toHaveLength(15);
+    expect(
+      document.querySelector('#server-rail .server-icon--more')
+    ).toBeNull();
     expect(erreurs).toEqual([]);
   });
 

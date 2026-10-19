@@ -36,6 +36,7 @@ node scripts/start.js
 npm audit --audit-level=high
 npx tsc --noEmit
 npm run lint
+npm run format:check
 npm run test:coverage
 npm run build
 ```

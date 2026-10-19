@@ -1,5 +1,11 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoginPage, gererFocusTrapRetourSession } from './LoginPage';
 
@@ -11,7 +17,9 @@ afterEach(() => {
 vi.mock('../../../i18n/i18n-web', () => ({
   LANGUES_SUPPORTEES: ['fr', 'en'],
   t: (_langue: string, cle: string) =>
-    cle === 'errors.ERR_IDENTIFIANTS_INVALIDES' ? 'Identifiants invalides' : cle,
+    cle === 'errors.ERR_IDENTIFIANTS_INVALIDES'
+      ? 'Identifiants invalides'
+      : cle,
 }));
 
 describe('LoginPage', () => {
@@ -72,7 +80,9 @@ describe('LoginPage', () => {
 
     render(React.createElement(LoginPage, props));
 
-    fireEvent.click(screen.getByRole('button', { name: 'auth.sessionInactiveConfirm' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'auth.sessionInactiveConfirm' })
+    );
     expect(onMessageRetourConfirme).toHaveBeenCalledTimes(1);
   });
 
@@ -112,9 +122,13 @@ describe('LoginPage', () => {
 
     render(React.createElement(LoginPage, props));
 
-    fireEvent.click(screen.getByRole('button', { name: 'auth.sessionInactiveConfirm' }));
     fireEvent.click(
-      screen.getByText('auth.sessionInactiveDismissHint').closest('.session-return-overlay') as Element
+      screen.getByRole('button', { name: 'auth.sessionInactiveConfirm' })
+    );
+    fireEvent.click(
+      screen
+        .getByText('auth.sessionInactiveDismissHint')
+        .closest('.session-return-overlay') as Element
     );
 
     expect(screen.getByRole('alertdialog')).toBeTruthy();
@@ -181,7 +195,9 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(form).not.toBeNull();
     expect(form?.contains(screen.getByRole('status'))).toBe(true);
-    expect(screen.getByRole('status').textContent).toContain('auth.sessionExpired');
+    expect(screen.getByRole('status').textContent).toContain(
+      'auth.sessionExpired'
+    );
   });
 
   it('valide le formulaire, déclenche la connexion et appelle la navigation par défaut', async () => {
@@ -235,7 +251,9 @@ describe('LoginPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'auth.join' }));
 
-    expect(screen.getByRole('status').textContent).toContain('auth.invalidFormat');
+    expect(screen.getByRole('status').textContent).toContain(
+      'auth.invalidFormat'
+    );
     expect(gateway.authentifier).not.toHaveBeenCalled();
   });
 
@@ -264,11 +282,14 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'auth.join' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('Identifiants invalides');
+      expect(screen.getByRole('status').textContent).toContain(
+        'Identifiants invalides'
+      );
     });
-    expect((screen.getByRole('button', { name: 'auth.join' }) as HTMLButtonElement).disabled).toBe(
-      false
-    );
+    expect(
+      (screen.getByRole('button', { name: 'auth.join' }) as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
   });
 
   it('gère un Tab de sortie et un Escape dans le piège de focus', () => {
@@ -280,7 +301,9 @@ describe('LoginPage', () => {
     document.body.appendChild(dialog);
 
     let activeElement: Element | null = buttonA;
-    vi.spyOn(document, 'activeElement', 'get').mockImplementation(() => activeElement);
+    vi.spyOn(document, 'activeElement', 'get').mockImplementation(
+      () => activeElement
+    );
     const focusButtonB = vi.spyOn(buttonB, 'focus').mockImplementation(() => {
       activeElement = buttonB;
     });
@@ -331,7 +354,9 @@ describe('LoginPage', () => {
     document.body.appendChild(dialog);
 
     const activeElement: Element | null = null;
-    vi.spyOn(document, 'activeElement', 'get').mockImplementation(() => activeElement);
+    vi.spyOn(document, 'activeElement', 'get').mockImplementation(
+      () => activeElement
+    );
 
     const event = new KeyboardEvent('keydown', {
       key: 'Tab',
@@ -373,11 +398,16 @@ describe('LoginPage', () => {
     );
 
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain('auth.sessionInactive');
+    expect(screen.getByRole('status').textContent).toContain(
+      'auth.sessionInactive'
+    );
   });
 
   it('utilise le dialogue comme cible de focus quand aucun élément focusable n’est présent', () => {
-    const querySelectorAllSpy = vi.spyOn(HTMLElement.prototype, 'querySelectorAll');
+    const querySelectorAllSpy = vi.spyOn(
+      HTMLElement.prototype,
+      'querySelectorAll'
+    );
     querySelectorAllSpy.mockReturnValue([] as unknown as NodeListOf<Element>);
 
     render(
@@ -427,7 +457,9 @@ describe('LoginPage', () => {
     document.body.appendChild(dialog);
 
     const activeElement: Element | null = buttonB;
-    vi.spyOn(document, 'activeElement', 'get').mockImplementation(() => activeElement);
+    vi.spyOn(document, 'activeElement', 'get').mockImplementation(
+      () => activeElement
+    );
 
     const event = new KeyboardEvent('keydown', {
       key: 'Tab',
@@ -478,7 +510,9 @@ describe('LoginPage', () => {
     document.body.appendChild(outside);
 
     let activeElement: Element | null = outside;
-    vi.spyOn(document, 'activeElement', 'get').mockImplementation(() => activeElement);
+    vi.spyOn(document, 'activeElement', 'get').mockImplementation(
+      () => activeElement
+    );
     const focusButtonA = vi.spyOn(buttonA, 'focus').mockImplementation(() => {
       activeElement = buttonA;
     });
@@ -522,7 +556,9 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'auth.join' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('errors.generic');
+      expect(screen.getByRole('status').textContent).toContain(
+        'errors.generic'
+      );
     });
   });
 
@@ -551,7 +587,9 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'auth.join' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('errors.generic');
+      expect(screen.getByRole('status').textContent).toContain(
+        'errors.generic'
+      );
     });
   });
 

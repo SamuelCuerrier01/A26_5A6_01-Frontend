@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { useAsyncResource } from './useAsyncResource';
 
-const describeError = (error: unknown) => `raison : ${(error as Error).message}`;
+const describeError = (error: unknown) =>
+  `raison : ${(error as Error).message}`;
 const isEmpty = (list: string[]) => list.length === 0;
 
 function deferred<T>() {
@@ -20,7 +21,9 @@ describe('useAsyncResource : les cinq états', () => {
   it('1. chargement tant que la première réponse n’est pas arrivée', async () => {
     const first = deferred<string[]>();
     const load = () => first.promise;
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     expect(result.current.state).toEqual({ status: 'loading' });
     expect(result.current.refreshing).toBe(false);
     await act(async () => first.resolve(['a']));
@@ -29,10 +32,18 @@ describe('useAsyncResource : les cinq états', () => {
 
   it('2. erreur avec une raison utile, puis réessai qui repasse par le chargement', async () => {
     const second = deferred<string[]>();
-    const load = vi.fn().mockRejectedValueOnce(new Error('serveur indisponible')).mockReturnValueOnce(second.promise);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('serveur indisponible'))
+      .mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() =>
-      expect(result.current.state).toEqual({ status: 'error', message: 'raison : serveur indisponible' }),
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: 'raison : serveur indisponible',
+      })
     );
     expect(result.current.refreshError).toBeNull();
     let retried!: Promise<void>;
@@ -49,20 +60,36 @@ describe('useAsyncResource : les cinq états', () => {
 
   it('3. vide quand la requête réussit sans élément', async () => {
     const load = async () => [];
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
-    await waitFor(() => expect(result.current.state).toEqual({ status: 'empty' }));
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
+    await waitFor(() =>
+      expect(result.current.state).toEqual({ status: 'empty' })
+    );
   });
 
   it('4. succès avec les données', async () => {
     const load = async () => ['a', 'b'];
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
-    await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', data: ['a', 'b'] }));
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
+    await waitFor(() =>
+      expect(result.current.state).toEqual({
+        status: 'ready',
+        data: ['a', 'b'],
+      })
+    );
   });
 
   it('5. rafraîchissement : la liste reste visible pendant la mise à jour puis se met à jour', async () => {
     const second = deferred<string[]>();
-    const load = vi.fn().mockResolvedValueOnce(['a']).mockReturnValueOnce(second.promise);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(['a'])
+      .mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     let refreshed!: Promise<void>;
     await act(async () => {
@@ -86,7 +113,9 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
       .mockResolvedValueOnce(['a'])
       .mockRejectedValueOnce(new Error('réseau coupé'))
       .mockResolvedValueOnce(['a', 'b']);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     await act(async () => result.current.refresh());
     expect(result.current.state).toEqual({ status: 'ready', data: ['a'] });
@@ -98,17 +127,31 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
   });
 
   it('passe en erreur si le rafraîchissement échoue alors que la liste était vide', async () => {
-    const load = vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('503'));
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('503'));
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('empty'));
     await act(async () => result.current.refresh());
-    expect(result.current.state).toEqual({ status: 'error', message: 'raison : 503' });
+    expect(result.current.state).toEqual({
+      status: 'error',
+      message: 'raison : 503',
+    });
   });
 
   it('ignore la réponse d’une requête remplacée par une plus récente', async () => {
     const slow = deferred<string[]>();
-    const load = vi.fn().mockResolvedValueOnce(['a']).mockReturnValueOnce(slow.promise).mockResolvedValueOnce(['fresh']);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(['a'])
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce(['fresh']);
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     await act(async () => void result.current.refresh());
     await act(async () => result.current.refresh());
@@ -119,8 +162,14 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
 
   it('ignore aussi la réponse réussie d’une requête remplacée par une plus récente', async () => {
     const slow = deferred<string[]>();
-    const load = vi.fn().mockResolvedValueOnce(['a']).mockReturnValueOnce(slow.promise).mockResolvedValueOnce(['fresh']);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(['a'])
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce(['fresh']);
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     await act(async () => void result.current.refresh());
     await act(async () => result.current.refresh());
@@ -131,8 +180,14 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
   it('ne reste pas en « refreshing » quand retry() remplace un rafraîchissement en cours', async () => {
     const slow = deferred<string[]>();
     const retried = deferred<string[]>();
-    const load = vi.fn().mockResolvedValueOnce(['a']).mockReturnValueOnce(slow.promise).mockReturnValueOnce(retried.promise);
-    const { result } = renderHook(() => useAsyncResource(load, isEmpty, describeError));
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(['a'])
+      .mockReturnValueOnce(slow.promise)
+      .mockReturnValueOnce(retried.promise);
+    const { result } = renderHook(() =>
+      useAsyncResource(load, isEmpty, describeError)
+    );
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     await act(async () => void result.current.refresh());
     expect(result.current.refreshing).toBe(true);
@@ -145,19 +200,28 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
 
   it('relance le chargement quand `load` change', async () => {
     const { result, rerender } = renderHook(
-      ({ load }: { load: () => Promise<string[]> }) => useAsyncResource(load, isEmpty, describeError),
-      { initialProps: { load: async () => ['a'] } },
+      ({ load }: { load: () => Promise<string[]> }) =>
+        useAsyncResource(load, isEmpty, describeError),
+      { initialProps: { load: async () => ['a'] } }
     );
-    await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', data: ['a'] }));
+    await waitFor(() =>
+      expect(result.current.state).toEqual({ status: 'ready', data: ['a'] })
+    );
     rerender({ load: async () => ['b'] });
-    await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', data: ['b'] }));
+    await waitFor(() =>
+      expect(result.current.state).toEqual({ status: 'ready', data: ['b'] })
+    );
   });
 
   it('ignore une réponse (succès ou échec) arrivée après le démontage', async () => {
     const ok = deferred<string[]>();
     const ko = deferred<string[]>();
-    const first = renderHook(() => useAsyncResource(() => ok.promise, isEmpty, describeError));
-    const second = renderHook(() => useAsyncResource(() => ko.promise, isEmpty, describeError));
+    const first = renderHook(() =>
+      useAsyncResource(() => ok.promise, isEmpty, describeError)
+    );
+    const second = renderHook(() =>
+      useAsyncResource(() => ko.promise, isEmpty, describeError)
+    );
     first.unmount();
     second.unmount();
     await act(async () => {
@@ -173,20 +237,32 @@ describe('useAsyncResource : échec d’un rafraîchissement', () => {
     const slowKo = deferred<string[]>();
     const fresh = async () => ['fresh'];
     const { result, rerender } = renderHook(
-      ({ load }: { load: () => Promise<string[]> }) => useAsyncResource(load, isEmpty, describeError),
-      { initialProps: { load: () => slowOk.promise } },
+      ({ load }: { load: () => Promise<string[]> }) =>
+        useAsyncResource(load, isEmpty, describeError),
+      { initialProps: { load: () => slowOk.promise } }
     );
     rerender({ load: fresh });
-    await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', data: ['fresh'] }));
+    await waitFor(() =>
+      expect(result.current.state).toEqual({ status: 'ready', data: ['fresh'] })
+    );
     await act(async () => slowOk.resolve(['ancien']));
     expect(result.current.state).toEqual({ status: 'ready', data: ['fresh'] });
     const other = renderHook(
-      ({ load }: { load: () => Promise<string[]> }) => useAsyncResource(load, isEmpty, describeError),
-      { initialProps: { load: () => slowKo.promise } },
+      ({ load }: { load: () => Promise<string[]> }) =>
+        useAsyncResource(load, isEmpty, describeError),
+      { initialProps: { load: () => slowKo.promise } }
     );
     other.rerender({ load: fresh });
-    await waitFor(() => expect(other.result.current.state).toEqual({ status: 'ready', data: ['fresh'] }));
+    await waitFor(() =>
+      expect(other.result.current.state).toEqual({
+        status: 'ready',
+        data: ['fresh'],
+      })
+    );
     await act(async () => slowKo.reject(new Error('ancien échec')));
-    expect(other.result.current.state).toEqual({ status: 'ready', data: ['fresh'] });
+    expect(other.result.current.state).toEqual({
+      status: 'ready',
+      data: ['fresh'],
+    });
   });
 });

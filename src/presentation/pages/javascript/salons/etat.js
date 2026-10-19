@@ -88,8 +88,7 @@ function ecrireStockage(stockage, clef, valeur) {
   try {
     if (valeur === null) stockage.removeItem(clef);
     else stockage.setItem(clef, valeur);
-  } catch {
-  }
+  } catch {}
 }
 
 function roleActuel() {

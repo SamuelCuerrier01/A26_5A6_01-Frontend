@@ -38,7 +38,9 @@
   function obtenirTitreNotificationDeconnexion() {
     if (racine.I18n && typeof racine.I18n.t === 'function') {
       const titre = racine.I18n.t('auth.logout');
-      return titre && titre !== 'auth.logout' ? titre : obtenirTextesFallback().deconnexion;
+      return titre && titre !== 'auth.logout'
+        ? titre
+        : obtenirTextesFallback().deconnexion;
     }
     return obtenirTextesFallback().deconnexion;
   }
@@ -56,10 +58,16 @@
         return;
       }
     } catch (erreur) {
-      console.warn('[inactivite] notification de déconnexion impossible :', erreur);
+      console.warn(
+        '[inactivite] notification de déconnexion impossible :',
+        erreur
+      );
     }
 
-    console.warn('[inactivite] notification de déconnexion non disponible :', message);
+    console.warn(
+      '[inactivite] notification de déconnexion non disponible :',
+      message
+    );
   }
 
   function obtenirMessageDeconnexionInactivite() {
@@ -97,11 +105,17 @@
           const resultat = onExpire();
           if (resultat && typeof resultat.then === 'function') {
             resultat.catch((erreur) => {
-              console.error('[inactivite] échec du callback d’expiration :', erreur);
+              console.error(
+                '[inactivite] échec du callback d’expiration :',
+                erreur
+              );
             });
           }
         } catch (erreur) {
-          console.error('[inactivite] exception synchronisée dans le callback d’expiration :', erreur);
+          console.error(
+            '[inactivite] exception synchronisée dans le callback d’expiration :',
+            erreur
+          );
         }
       }, delaiMs);
     }
@@ -150,11 +164,15 @@
     objetInactivite.stopper();
 
     try {
-      if (!racine.electronAPI || typeof racine.electronAPI.deconnexionSession !== 'function') {
+      if (
+        !racine.electronAPI ||
+        typeof racine.electronAPI.deconnexionSession !== 'function'
+      ) {
         return null;
       }
 
-      const utilisateur = await racine.electronAPI.obtenirUtilisateurConnecte?.();
+      const utilisateur =
+        await racine.electronAPI.obtenirUtilisateurConnecte?.();
       if (!utilisateur) {
         return null;
       }
@@ -168,12 +186,16 @@
             return;
           }
 
-          const { definirMotifRetourConnexion, allerALaConnexion, deconnexionSession } =
-            racine.electronAPI;
+          const {
+            definirMotifRetourConnexion,
+            allerALaConnexion,
+            deconnexionSession,
+          } = racine.electronAPI;
 
           if (typeof definirMotifRetourConnexion === 'function') {
             try {
-              const motifRetour = await definirMotifRetourConnexion('session-inactive');
+              const motifRetour =
+                await definirMotifRetourConnexion('session-inactive');
               if (motifRetour !== 'session-inactive') {
                 console.warn(
                   '[inactivite] motif de retour non confirmé par le main process :',
@@ -181,7 +203,10 @@
                 );
               }
             } catch (erreur) {
-              console.error('[inactivite] échec de définition du motif :', erreur);
+              console.error(
+                '[inactivite] échec de définition du motif :',
+                erreur
+              );
             }
           } else {
             console.error(
@@ -200,14 +225,19 @@
           }
 
           if (typeof allerALaConnexion !== 'function') {
-            console.error('[inactivite] méthode absente pour revenir à la connexion.');
+            console.error(
+              '[inactivite] méthode absente pour revenir à la connexion.'
+            );
             return;
           }
 
           try {
             await allerALaConnexion();
           } catch (erreur) {
-            console.error('[inactivite] échec de retour à la connexion :', erreur);
+            console.error(
+              '[inactivite] échec de retour à la connexion :',
+              erreur
+            );
           }
         },
       });
@@ -223,7 +253,10 @@
 
         if (estEvenementFrequent) {
           const maintenant = Date.now();
-          if (maintenant - derniereReinitialisationFrequentMs < DELAI_THROTTLE_REINITIALISATION_MS) {
+          if (
+            maintenant - derniereReinitialisationFrequentMs <
+            DELAI_THROTTLE_REINITIALISATION_MS
+          ) {
             return;
           }
           derniereReinitialisationFrequentMs = maintenant;
@@ -256,5 +289,4 @@
       initialisationEnCours = false;
     }
   }
-
 })(globalThis);

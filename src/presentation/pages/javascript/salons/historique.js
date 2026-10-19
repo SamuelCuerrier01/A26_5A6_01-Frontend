@@ -108,4 +108,3 @@ function creerStatutHistorique(etatHistorique, surClicChargerPlus) {
   bouton.addEventListener('click', surClicChargerPlus);
   return bouton;
 }
-

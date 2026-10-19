@@ -485,7 +485,12 @@ body {
   background: #0d3d38;
 }
 .theme-preview--sombre span:nth-child(3) {
-  background: linear-gradient(#0e453e 0 30%, transparent 30% 45%, #3ddc97 45% 55%, transparent 55%);
+  background: linear-gradient(
+    #0e453e 0 30%,
+    transparent 30% 45%,
+    #3ddc97 45% 55%,
+    transparent 55%
+  );
 }
 
 .theme-preview--clair {
@@ -496,7 +501,12 @@ body {
   background: #e3f6ef;
 }
 .theme-preview--clair span:nth-child(3) {
-  background: linear-gradient(#f5fcf9 0 30%, transparent 30% 45%, #15a383 45% 55%, transparent 55%);
+  background: linear-gradient(
+    #f5fcf9 0 30%,
+    transparent 30% 45%,
+    #15a383 45% 55%,
+    transparent 55%
+  );
 }
 
 .segmented {

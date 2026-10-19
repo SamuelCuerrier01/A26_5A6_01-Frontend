@@ -34,7 +34,9 @@ function traduireErreurSoumission(
   }
   const cleTraduction = `errors.${erreur.cle}`;
   const brutTraduit = t(langue, cleTraduction);
-  return brutTraduit === cleTraduction ? t(langue, 'errors.generic') : brutTraduit;
+  return brutTraduit === cleTraduction
+    ? t(langue, 'errors.generic')
+    : brutTraduit;
 }
 
 export function InscriptionPage({

@@ -7,7 +7,6 @@ const {
 } = require('./constantes');
 
 module.exports = {
-
   async envoyerMessage({ salonId, contenu }) {
     this.verifierReseauConnecte();
     const brut = await this.appelHttp(
@@ -20,15 +19,18 @@ module.exports = {
   },
 
   async confirmerLivraisonDm(brut) {
-    if (!brut.id || brut.recipientId !== this.utilisateurConnecte?.id || brut.deliveredAt)
+    if (
+      !brut.id ||
+      brut.recipientId !== this.utilisateurConnecte?.id ||
+      brut.deliveredAt
+    )
       return;
     try {
       await this.appelHttp(
         `/api/messages/${encodeURIComponent(brut.id)}/delivered`,
         { methode: 'PUT' }
       );
-    } catch {
-    }
+    } catch {}
   },
 
   mapperMessageDm(brut) {

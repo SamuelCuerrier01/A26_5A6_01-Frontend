@@ -12,9 +12,12 @@ const LOADING = { status: 'loading' } as const;
 export function useAsyncResource<T>(
   load: () => Promise<T>,
   isEmpty: (data: T) => boolean,
-  describeError: (error: unknown) => string,
+  describeError: (error: unknown) => string
 ) {
-  const [remote, setRemote] = useState<{ load: () => Promise<T>; state: Settled<T> } | null>(null);
+  const [remote, setRemote] = useState<{
+    load: () => Promise<T>;
+    state: Settled<T>;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -25,11 +28,18 @@ export function useAsyncResource<T>(
     describeRef.current = describeError;
   });
 
-  const state: LoadState<T> = remote && remote.load === load ? remote.state : LOADING;
+  const state: LoadState<T> =
+    remote && remote.load === load ? remote.state : LOADING;
 
   const settle = useCallback(
-    (data: T) => setRemote({ load, state: isEmptyRef.current(data) ? { status: 'empty' } : { status: 'ready', data } }),
-    [load],
+    (data: T) =>
+      setRemote({
+        load,
+        state: isEmptyRef.current(data)
+          ? { status: 'empty' }
+          : { status: 'ready', data },
+      }),
+    [load]
   );
 
   const loadInto = useCallback(
@@ -40,12 +50,15 @@ export function useAsyncResource<T>(
         settle(data);
       } catch (error) {
         if (id !== requestId.current || isCancelled()) return;
-        setRemote({ load, state: { status: 'error', message: describeRef.current(error) } });
+        setRemote({
+          load,
+          state: { status: 'error', message: describeRef.current(error) },
+        });
       } finally {
         if (id === requestId.current) setRefreshing(false);
       }
     },
-    [load, settle],
+    [load, settle]
   );
 
   useEffect(() => {
@@ -79,7 +92,9 @@ export function useAsyncResource<T>(
       if (id !== requestId.current) return;
       const message = describeRef.current(error);
       setRemote((prev) =>
-        prev && prev.load === load && prev.state.status === 'ready' ? prev : { load, state: { status: 'error', message } },
+        prev && prev.load === load && prev.state.status === 'ready'
+          ? prev
+          : { load, state: { status: 'error', message } }
       );
       setRefreshError(message);
     } finally {

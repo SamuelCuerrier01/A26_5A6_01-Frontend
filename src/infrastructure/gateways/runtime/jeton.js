@@ -50,7 +50,9 @@ function sauvegarderJetonPersiste(jeton) {
         fs.rmSync(cheminFichierSession(), { force: true });
         return;
       }
-      const donnees = { jetonChiffre: coffre.encryptString(jeton).toString('base64') };
+      const donnees = {
+        jetonChiffre: coffre.encryptString(jeton).toString('base64'),
+      };
       const chemin = cheminFichierSession();
       fs.writeFileSync(chemin, JSON.stringify(donnees), {
         encoding: 'utf8',

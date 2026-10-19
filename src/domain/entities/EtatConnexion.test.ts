@@ -57,11 +57,16 @@ describe('estEnReconnexion', () => {
 
 describe('secondesAvantTentative', () => {
   it('retourne null sans tentative planifiée', () => {
-    expect(secondesAvantTentative(creerEtatConnexion('reconnexion'))).toBeNull();
+    expect(
+      secondesAvantTentative(creerEtatConnexion('reconnexion'))
+    ).toBeNull();
   });
 
   it('arrondit au supérieur et ne descend jamais sous zéro', () => {
-    const etat = { ...creerEtatConnexion('reconnexion', 0), prochaineTentative: 2500 };
+    const etat = {
+      ...creerEtatConnexion('reconnexion', 0),
+      prochaineTentative: 2500,
+    };
     expect(secondesAvantTentative(etat, 1000)).toBe(2);
     expect(secondesAvantTentative(etat, 9000)).toBe(0);
   });

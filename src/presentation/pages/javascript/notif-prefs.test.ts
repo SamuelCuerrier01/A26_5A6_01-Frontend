@@ -418,31 +418,70 @@ it.each(['salon', 'prive'])(
     const serveur = api();
     const conversationId = `rendu-${type}`;
     let resoudre!: (valeur: { nonLus: number }) => void;
-    serveur.marquerConversationLue.mockImplementationOnce(() => new Promise((r) => { resoudre = r; }));
+    serveur.marquerConversationLue.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resoudre = r;
+        })
+    );
     NotifPrefs.ajouterNonLu(type, conversationId);
     const options = { messageId: 'affiche-1', estAffichee: () => true };
     NotifPrefs.marquerLu(serveur, type, conversationId, options);
-    await vi.waitFor(() => expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(1));
-    expect(serveur.marquerConversationLue).toHaveBeenLastCalledWith({ type, conversationId, messageId: 'affiche-1' });
+    await vi.waitFor(() =>
+      expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(1)
+    );
+    expect(serveur.marquerConversationLue).toHaveBeenLastCalledWith({
+      type,
+      conversationId,
+      messageId: 'affiche-1',
+    });
     NotifPrefs.ajouterNonLu(type, conversationId);
     resoudre({ nonLus: 1 });
-    await vi.waitFor(() => expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(1));
+    await vi.waitFor(() =>
+      expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(1)
+    );
     await new Promise((r) => setTimeout(r, 0));
     expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(1);
     let terminer!: (valeur: { nonLus: number }) => void;
-    serveur.marquerConversationLue.mockImplementationOnce(() => new Promise((r) => { terminer = r; }));
-    NotifPrefs.marquerLu(serveur, type, conversationId, { ...options, messageId: 'affiche-2' });
-    await vi.waitFor(() => expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(2));
+    serveur.marquerConversationLue.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          terminer = r;
+        })
+    );
+    NotifPrefs.marquerLu(serveur, type, conversationId, {
+      ...options,
+      messageId: 'affiche-2',
+    });
+    await vi.waitFor(() =>
+      expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(2)
+    );
     NotifPrefs.ajouterNonLu(type, conversationId);
-    NotifPrefs.marquerLu(serveur, type, conversationId, { ...options, messageId: 'affiche-3' });
+    NotifPrefs.marquerLu(serveur, type, conversationId, {
+      ...options,
+      messageId: 'affiche-3',
+    });
     terminer({ nonLus: 1 });
-    await vi.waitFor(() => expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(3));
-    expect(serveur.marquerConversationLue).toHaveBeenLastCalledWith({ type, conversationId, messageId: 'affiche-3' });
-    await vi.waitFor(() => expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(0));
+    await vi.waitFor(() =>
+      expect(serveur.marquerConversationLue).toHaveBeenCalledTimes(3)
+    );
+    expect(serveur.marquerConversationLue).toHaveBeenLastCalledWith({
+      type,
+      conversationId,
+      messageId: 'affiche-3',
+    });
+    await vi.waitFor(() =>
+      expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(0)
+    );
   }
 );
 
-it.each([['salon', true], ['prive', true], ['salon', false], ['prive', false]] as const)(
+it.each([
+  ['salon', true],
+  ['prive', true],
+  ['salon', false],
+  ['prive', false],
+] as const)(
   'réconcilie un événement %s après snapshot (déjà inclus : %s)',
   async (type, dejaInclus) => {
     const conversationId = `retard-${type}`;
@@ -456,15 +495,26 @@ it.each([['salon', true], ['prive', true], ['salon', false], ['prive', false]] a
     expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(2);
     const nombreServeur = dejaInclus ? 1 : 2;
     let repondre!: (valeur: ReturnType<typeof nonLus>) => void;
-    serveur.obtenirNonLus.mockImplementationOnce(() => new Promise((r) => { repondre = r; }));
+    serveur.obtenirNonLus.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          repondre = r;
+        })
+    );
     const rafraichirBadges = vi.fn(() => {
       expect(NotifPrefs.nombreNonLus(type, conversationId)).toBe(nombreServeur);
     });
     const enCours = NotifPrefs.traiterMessageRecu(
       { type, conversationId, auteurId: 'autre' },
-      { utilisateurId: 'moi', api: serveur, surNonLusActualises: rafraichirBadges }
+      {
+        utilisateurId: 'moi',
+        api: serveur,
+        surNonLusActualises: rafraichirBadges,
+      }
     );
-    await vi.waitFor(() => expect(serveur.obtenirNonLus).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(serveur.obtenirNonLus).toHaveBeenCalledTimes(2)
+    );
     expect(rafraichirBadges).not.toHaveBeenCalled();
     repondre(nonLus(nombreServeur));
     await enCours;

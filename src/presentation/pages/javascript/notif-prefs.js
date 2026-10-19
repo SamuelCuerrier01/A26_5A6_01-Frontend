@@ -31,8 +31,7 @@
         clefApercu(utilisateurId),
         affiche ? 'oui' : 'non'
       );
-    } catch {
-    }
+    } catch {}
   }
 
   function obtenirMode(utilisateurId) {
@@ -53,8 +52,7 @@
     if (!utilisateurId || !MODES.includes(mode)) return;
     try {
       global.localStorage.setItem(clefMode(utilisateurId), mode);
-    } catch {
-    }
+    } catch {}
   }
 
   const compteurs = { salon: new Map(), prive: new Map() };
@@ -118,9 +116,13 @@
     compteurs[type].delete(conversationId);
     let reussi = false;
     Promise.resolve()
-      .then(() => api.marquerConversationLue({
-        type, conversationId, ...(messageId ? { messageId } : {}),
-      }))
+      .then(() =>
+        api.marquerConversationLue({
+          type,
+          conversationId,
+          ...(messageId ? { messageId } : {}),
+        })
+      )
       .then((reponse) => {
         reussi = true;
         revisionCompteurs += 1;
@@ -142,7 +144,8 @@
         lecturesEnCours[type].delete(conversationId);
         const rechargementDemande =
           rechargementsEnAttente[type].delete(conversationId);
-        const dernierRendu = rendusLectures[type].get(conversationId) ?? options;
+        const dernierRendu =
+          rendusLectures[type].get(conversationId) ?? options;
         rendusLectures[type].delete(conversationId);
         const estAffichee = dernierRendu.estAffichee?.() ?? false;
         if ((reussi && !estAffichee) || rechargementDemande) {
@@ -210,8 +213,14 @@
   }
 
   async function traiterMessageRecu(message, options) {
-    const { utilisateurId, surSalon, surPrive, notifierMessageSysteme, api, surNonLusActualises } =
-      options ?? {};
+    const {
+      utilisateurId,
+      surSalon,
+      surPrive,
+      notifierMessageSysteme,
+      api,
+      surNonLusActualises,
+    } = options ?? {};
     try {
       const mode = obtenirMode(utilisateurId);
       console.log(

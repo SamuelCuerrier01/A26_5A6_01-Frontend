@@ -1,16 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { normalizeQuery, type SearchInput, type SearchPage, type SearchResult } from './search';
+import {
+  normalizeQuery,
+  type SearchInput,
+  type SearchPage,
+  type SearchResult,
+} from './search';
 
 const DEFAULT_DEBOUNCE_MS = 350;
 
-export type SearchStatus = 'idle' | 'tooShort' | 'loading' | 'ready' | 'empty' | 'error';
+export type SearchStatus =
+  'idle' | 'tooShort' | 'loading' | 'ready' | 'empty' | 'error';
 
 type Remote =
-  | { key: string; status: 'ready'; results: SearchResult[]; nextCursor: string | null }
+  | {
+      key: string;
+      status: 'ready';
+      results: SearchResult[];
+      nextCursor: string | null;
+    }
   | { key: string; status: 'error'; message: string };
 
-function appendUnique(current: SearchResult[], page: SearchResult[]): SearchResult[] {
+function appendUnique(
+  current: SearchResult[],
+  page: SearchResult[]
+): SearchResult[] {
   const seen = new Set(current.map((r) => r.id));
   return [
     ...current,
@@ -28,7 +42,14 @@ export type SearchDependencies = {
   debounceMs?: number;
 };
 
-export function useSearchResults({ search, describeError, debounceMs = DEFAULT_DEBOUNCE_MS }: SearchDependencies, conversationId?: string) {
+export function useSearchResults(
+  {
+    search,
+    describeError,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+  }: SearchDependencies,
+  conversationId?: string
+) {
   const [query, setQuery] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [remote, setRemote] = useState<Remote | null>(null);
@@ -48,14 +69,27 @@ export function useSearchResults({ search, describeError, debounceMs = DEFAULT_D
     if (!normalized) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      deps.current.search({ q: normalized, conversationId, signal: controller.signal }).then(
-        (page) => {
-          if (!controller.signal.aborted) setRemote({ key, status: 'ready', results: page.results, nextCursor: page.nextCursor });
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted) setRemote({ key, status: 'error', message: deps.current.describeError(error) });
-        },
-      );
+      deps.current
+        .search({ q: normalized, conversationId, signal: controller.signal })
+        .then(
+          (page) => {
+            if (!controller.signal.aborted)
+              setRemote({
+                key,
+                status: 'ready',
+                results: page.results,
+                nextCursor: page.nextCursor,
+              });
+          },
+          (error: unknown) => {
+            if (!controller.signal.aborted)
+              setRemote({
+                key,
+                status: 'error',
+                message: deps.current.describeError(error),
+              });
+          }
+        );
     }, debounceMs);
     return () => {
       clearTimeout(timer);
@@ -78,18 +112,35 @@ export function useSearchResults({ search, describeError, debounceMs = DEFAULT_D
   const nextCursor = current?.status === 'ready' ? current.nextCursor : null;
 
   const loadMore = useCallback(async () => {
-    if (!normalized || !current || current.status !== 'ready' || !current.nextCursor || moreRequest.current) return;
+    if (
+      !normalized ||
+      !current ||
+      current.status !== 'ready' ||
+      !current.nextCursor ||
+      moreRequest.current
+    )
+      return;
     moreRequest.current = true;
     setLoadingMore(true);
     setMoreError(null);
     const controller = new AbortController();
     moreController.current = controller;
     try {
-      const page = await deps.current.search({ q: normalized, conversationId, cursor: current.nextCursor, signal: controller.signal });
+      const page = await deps.current.search({
+        q: normalized,
+        conversationId,
+        cursor: current.nextCursor,
+        signal: controller.signal,
+      });
       if (controller.signal.aborted) return;
-      setRemote({ ...current, results: appendUnique(current.results, page.results), nextCursor: page.nextCursor });
+      setRemote({
+        ...current,
+        results: appendUnique(current.results, page.results),
+        nextCursor: page.nextCursor,
+      });
     } catch (error) {
-      if (!controller.signal.aborted) setMoreError(deps.current.describeError(error));
+      if (!controller.signal.aborted)
+        setMoreError(deps.current.describeError(error));
     } finally {
       if (!controller.signal.aborted) {
         moreRequest.current = false;

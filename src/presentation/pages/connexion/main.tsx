@@ -46,8 +46,7 @@ function App() {
                 setMessageRetourConfirmable(true);
               }
             })
-            .catch(() => {
-            });
+            .catch(() => {});
         }
         if (session) {
           void window.electronAPI.allerAuTableauDeBord();
@@ -70,8 +69,7 @@ function App() {
         setLangue(langueResolue);
         document.documentElement.lang = langueResolue;
       })
-      .catch(() => {
-      });
+      .catch(() => {});
   }, []);
 
   const changerLangue = useCallback((nouvelleLangue: string) => {
@@ -81,8 +79,7 @@ function App() {
         setLangue(langueConfirmee);
         document.documentElement.lang = langueConfirmee;
       })
-      .catch(() => {
-      });
+      .catch(() => {});
   }, []);
 
   const fermerMessageRetour = useCallback(() => {
@@ -96,8 +93,7 @@ function App() {
       .then((themeResolu) => {
         document.documentElement.dataset.theme = themeResolu;
       })
-      .catch(() => {
-      });
+      .catch(() => {});
   }, []);
 
   const gatewaySession: GatewaySession = useMemo(
@@ -183,12 +179,7 @@ function App() {
     );
   }
 
-  return (
-    <LoginPage
-      {...baseLoginProps}
-      messageRetourConfirmable={false}
-    />
-  );
+  return <LoginPage {...baseLoginProps} messageRetourConfirmable={false} />;
 }
 
 const rootEl = document.getElementById('root');

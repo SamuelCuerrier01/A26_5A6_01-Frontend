@@ -93,7 +93,9 @@ describe('securite (processus main)', () => {
     expect(s.isProdLoginFileUrl('pas une url')).toBe(false);
     expect(s.isProdLoginFileUrl('https://exemple.test/')).toBe(false);
     expect(s.isProdLoginFileUrl('file://serveur/partage/x.html')).toBe(false);
-    expect(s.isProdLoginFileUrl('file:///tmp/dossier%2Finterdit.html')).toBe(false);
+    expect(s.isProdLoginFileUrl('file:///tmp/dossier%2Finterdit.html')).toBe(
+      false
+    );
     expect(
       s.isPathInsideAppPages(path.join(s.APP_PAGES_ROOT, 'index.html'))
     ).toBe(true);

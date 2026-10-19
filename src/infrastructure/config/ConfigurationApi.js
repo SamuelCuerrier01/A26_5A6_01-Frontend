@@ -9,7 +9,9 @@ function obtenirConfiguration() {
   );
   return {
     baseUrlHttp,
-    baseUrlSocket: verifierOrigine(process.env.CHATVARDAGE_SOCKET_URL || baseUrlHttp),
+    baseUrlSocket: verifierOrigine(
+      process.env.CHATVARDAGE_SOCKET_URL || baseUrlHttp
+    ),
   };
 }
 
@@ -17,12 +19,22 @@ function verifierOrigine(valeur) {
   const url = new URL(valeur);
   if (
     !['http:', 'https:'].includes(url.protocol) ||
-    url.username || url.password || url.pathname !== '/' || url.search || url.hash
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
   ) {
-    throw new Error('Le serveur doit être une origine HTTP(S) sans identifiants.');
+    throw new Error(
+      'Le serveur doit être une origine HTTP(S) sans identifiants.'
+    );
   }
   const locale = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-  if (url.protocol !== 'https:' && !locale && process.env.NODE_ENV !== 'development') {
+  if (
+    url.protocol !== 'https:' &&
+    !locale &&
+    process.env.NODE_ENV !== 'development'
+  ) {
     throw new Error('HTTPS est requis pour un serveur distant.');
   }
   return url.origin;

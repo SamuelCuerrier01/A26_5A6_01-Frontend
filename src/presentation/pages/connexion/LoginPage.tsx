@@ -43,7 +43,9 @@ function traduireErreurSoumission(
   }
   const cleTraduction = `errors.${erreur.cle}`;
   const brutTraduit = t(langue, cleTraduction);
-  return brutTraduit === cleTraduction ? t(langue, 'errors.generic') : brutTraduit;
+  return brutTraduit === cleTraduction
+    ? t(langue, 'errors.generic')
+    : brutTraduit;
 }
 
 const SELECTEUR_FOCUSABLES =
@@ -75,17 +77,18 @@ export function gererFocusTrapRetourSession(
   const firstFocusableActuel = focusablesActuels[0];
   const lastFocusableActuel = focusablesActuels[focusablesActuels.length - 1];
   const currentTarget = document.activeElement as HTMLElement | null;
-  const doitRebouclement =
-    event.shiftKey
-      ? !dialog.contains(currentTarget) || currentTarget === firstFocusableActuel
-      : !dialog.contains(currentTarget) || currentTarget === lastFocusableActuel;
+  const doitRebouclement = event.shiftKey
+    ? !dialog.contains(currentTarget) || currentTarget === firstFocusableActuel
+    : !dialog.contains(currentTarget) || currentTarget === lastFocusableActuel;
 
   if (!doitRebouclement) {
     return;
   }
 
   event.preventDefault();
-  const cibleFocus = event.shiftKey ? lastFocusableActuel : firstFocusableActuel;
+  const cibleFocus = event.shiftKey
+    ? lastFocusableActuel
+    : firstFocusableActuel;
   cibleFocus.focus();
 }
 
@@ -117,7 +120,9 @@ export function LoginPage({
 
     const dialog = dialogRef.current;
     const previousActiveElement = document.activeElement as HTMLElement | null;
-    const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(SELECTEUR_FOCUSABLES));
+    const focusables = Array.from(
+      dialog.querySelectorAll<HTMLElement>(SELECTEUR_FOCUSABLES)
+    );
     const firstFocusable = focusables[0] ?? dialog;
     firstFocusable.focus();
 
@@ -202,7 +207,9 @@ export function LoginPage({
           aria-hidden="true"
         />
 
-        <label htmlFor="identifiant-input">{t(langue, 'auth.fieldLabel')}</label>
+        <label htmlFor="identifiant-input">
+          {t(langue, 'auth.fieldLabel')}
+        </label>
         <input
           id="identifiant-input"
           name="identifiant"
@@ -282,7 +289,10 @@ export function LoginPage({
             <h2 id={messageRetourTitreId} className="session-return-title">
               {t(langue, 'auth.sessionReturnTitle')}
             </h2>
-            <p id={messageRetourDescriptionId} className="session-return-message">
+            <p
+              id={messageRetourDescriptionId}
+              className="session-return-message"
+            >
               {t(langue, messageRetour)}
               <span className="session-return-hint">
                 {t(langue, 'auth.sessionInactiveDismissHint')}

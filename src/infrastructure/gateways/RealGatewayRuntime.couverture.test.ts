@@ -161,10 +161,16 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
     });
 
     it('refuse le coffre Linux basic_text', () => {
-      simulerElectron({ ...coffre(), getSelectedStorageBackend: () => 'basic_text' });
+      simulerElectron({
+        ...coffre(),
+        getSelectedStorageBackend: () => 'basic_text',
+      });
       sauvegarderJetonPersiste('secret');
       expect(existsSync(fichier())).toBe(false);
-      simulerElectron({ ...coffre(), getSelectedStorageBackend: () => 'gnome_libsecret' });
+      simulerElectron({
+        ...coffre(),
+        getSelectedStorageBackend: () => 'gnome_libsecret',
+      });
       sauvegarderJetonPersiste('secret');
       expect(chargerJetonPersiste()).toBe('secret');
     });
@@ -541,7 +547,12 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: 1 },
         { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: '' },
         { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: 'abc' },
-        { kind: 'room', targetId: 'salon', userId: 'u2', lastReadAt: '+999999-01-01T00:00:00Z' },
+        {
+          kind: 'room',
+          targetId: 'salon',
+          userId: 'u2',
+          lastReadAt: '+999999-01-01T00:00:00Z',
+        },
         null,
       ]) {
         s._declencher('read-state.updated', invalide);
@@ -1479,11 +1490,22 @@ describe('pagination depuis une cible et confirmation de livraison', () => {
     for (const contexte of ['dm', 'salon']) {
       for (const options of [{ autourId: 'ancien' }, { apresId: 'ancien' }]) {
         if (contexte === 'dm') {
-          await runtime.obtenirMessagesPriveesAvant({ conversationId: 'moi:u2', taille: 50, ...options });
+          await runtime.obtenirMessagesPriveesAvant({
+            conversationId: 'moi:u2',
+            taille: 50,
+            ...options,
+          });
         } else {
-          await runtime.obtenirMessagesSalonAvant({ salonId: 'salon', taille: 50, ...options });
+          await runtime.obtenirMessagesSalonAvant({
+            salonId: 'salon',
+            taille: 50,
+            ...options,
+          });
         }
-        const url = new URL(String(http.mock.calls.at(-1)?.[0]), 'http://gateway.test');
+        const url = new URL(
+          String(http.mock.calls.at(-1)?.[0]),
+          'http://gateway.test'
+        );
         expect(url.searchParams.get('limit')).toBe('50');
         if ('autourId' in options) {
           expect(url.searchParams.get('around')).toBe('ancien');
@@ -1499,9 +1521,13 @@ describe('pagination depuis une cible et confirmation de livraison', () => {
   it('tolere une confirmation en panne et conserve la livraison deja recue', async () => {
     const { runtime } = runtimeConnecte();
     vi.spyOn(runtime, 'appelHttp').mockRejectedValue(new Error('offline'));
-    await expect(runtime.confirmerLivraisonDm(messageBrut())).resolves.toBeUndefined();
+    await expect(
+      runtime.confirmerLivraisonDm(messageBrut())
+    ).resolves.toBeUndefined();
     const deliveredAt = '2026-01-01T00:00:01.000Z';
-    expect(runtime.mapperMessageDm(messageBrut({ deliveredAt })).livraison).toBe(Date.parse(deliveredAt));
+    expect(
+      runtime.mapperMessageDm(messageBrut({ deliveredAt })).livraison
+    ).toBe(Date.parse(deliveredAt));
     await runtime.confirmerLivraisonDm(messageBrut({ deliveredAt }));
     await runtime.confirmerLivraisonDm(messageBrut({ recipientId: 'autre' }));
     await runtime.confirmerLivraisonDm(messageBrut({ id: undefined }));
@@ -1511,7 +1537,9 @@ describe('pagination depuis une cible et confirmation de livraison', () => {
 
   it('transmet les confirmations de livraison recues en temps reel', () => {
     const { runtime, socket } = runtimeConnecte();
-    const traiter = vi.spyOn(runtime, 'traiterMessageDmModifie').mockImplementation(() => {});
+    const traiter = vi
+      .spyOn(runtime, 'traiterMessageDmModifie')
+      .mockImplementation(() => {});
     runtime.connecterSocket();
     const message = messageBrut({ deliveredAt: '2026-01-01T00:00:01.000Z' });
     socket()._declencher('private-message.delivered', message);

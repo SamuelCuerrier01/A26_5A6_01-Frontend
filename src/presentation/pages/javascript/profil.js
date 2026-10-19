@@ -145,7 +145,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     if (el.avatarRemove) el.avatarRemove.hidden = !preferences?.avatar;
     if (el.handle) el.handle.textContent = pseudo ? `@${pseudo}` : '';
-    if (el.courrielAffiche) el.courrielAffiche.textContent = utilisateur?.courriel ?? '';
+    if (el.courrielAffiche)
+      el.courrielAffiche.textContent = utilisateur?.courriel ?? '';
     if (el.roleBadge) {
       const role = utilisateur?.role;
       const cle = role === 'admin' ? 'channels.roleAdmin' : null;
@@ -211,7 +212,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bitmap = await createImageBitmap(fichier);
     const cote = Math.min(bitmap.width, bitmap.height);
     const canvas = creerEl('canvas', {
-      attrs: { width: String(TAILLE_AVATAR_PX), height: String(TAILLE_AVATAR_PX) },
+      attrs: {
+        width: String(TAILLE_AVATAR_PX),
+        height: String(TAILLE_AVATAR_PX),
+      },
     });
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
@@ -237,7 +241,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   async function enregistrerAvatar(avatar, messageSucces) {
     if (el.avatarWrap) el.avatarWrap.dataset.loading = 'true';
     try {
-      afficherPreferences(await window.electronAPI.modifierPreferences({ avatar }));
+      afficherPreferences(
+        await window.electronAPI.modifierPreferences({ avatar })
+      );
       notifier(messageSucces);
     } catch (erreur) {
       notifier(messageErreur(erreur), true);
@@ -295,7 +301,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bouton = el.identityForm?.querySelector('button[type="submit"]');
     if (!bouton || bouton.dataset.loading === 'true') return;
     const pseudo = el.pseudoInput.value.trim();
-    const change = pseudo !== (utilisateur?.pseudo ?? '') || aliasEnCoursDEdition();
+    const change =
+      pseudo !== (utilisateur?.pseudo ?? '') || aliasEnCoursDEdition();
     bouton.disabled = !change || !pseudo;
     afficherEntete();
   }
@@ -305,7 +312,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   el.identityForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const bouton = event.submitter ?? el.identityForm.querySelector('button[type="submit"]');
+    const bouton =
+      event.submitter ?? el.identityForm.querySelector('button[type="submit"]');
     const pseudo = el.pseudoInput.value.trim();
     const alias = el.aliasInput.value.trim();
     if (!pseudo) return;
@@ -317,7 +325,9 @@ window.addEventListener('DOMContentLoaded', async () => {
           el.pseudoInput.value = utilisateur.pseudo;
         }
         if (alias !== (preferences?.alias ?? '')) {
-          const nouvelles = await window.electronAPI.modifierPreferences({ alias });
+          const nouvelles = await window.electronAPI.modifierPreferences({
+            alias,
+          });
           preferences = nouvelles;
           el.aliasInput.value = nouvelles.alias ?? '';
         }
@@ -348,12 +358,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   el.accountForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const bouton = event.submitter ?? el.accountForm.querySelector('button[type="submit"]');
+    const bouton =
+      event.submitter ?? el.accountForm.querySelector('button[type="submit"]');
     const motDePasse = el.newPasswordInput.value;
     const motDePasseActuel = el.currentPasswordInput.value;
     if (!motDePasse) return;
     if (!motDePasseActuel) {
-      afficherMessageChamp(el.accountMessage, t('profile.currentPasswordRequiredHint'), 'error');
+      afficherMessageChamp(
+        el.accountMessage,
+        t('profile.currentPasswordRequiredHint'),
+        'error'
+      );
       return;
     }
     const donnees = { motDePasseActuel, motDePasse };
@@ -364,10 +379,18 @@ window.addEventListener('DOMContentLoaded', async () => {
       el.emailInput.value = utilisateur.courriel ?? '';
       el.newPasswordInput.value = '';
       el.currentPasswordInput.value = '';
-      afficherMessageChamp(el.accountMessage, t('profile.accountUpdated'), 'ok');
+      afficherMessageChamp(
+        el.accountMessage,
+        t('profile.accountUpdated'),
+        'ok'
+      );
       afficherEntete();
     } catch (erreur) {
-      afficherMessageChamp(el.accountMessage, messageErreurMotDePasse(erreur), 'error');
+      afficherMessageChamp(
+        el.accountMessage,
+        messageErreurMotDePasse(erreur),
+        'error'
+      );
     }
     majEtatFormulaireCompte();
   });
@@ -419,7 +442,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         oublierRailEnCache();
         await window.electronAPI.allerALaConnexion();
       } catch (erreur) {
-        afficherMessageChamp(el.deleteMessage, messageErreurMotDePasse(erreur), 'error');
+        afficherMessageChamp(
+          el.deleteMessage,
+          messageErreurMotDePasse(erreur),
+          'error'
+        );
         boutonAnnuler.disabled = false;
         boutonConfirmer.disabled = false;
       }
@@ -438,7 +465,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   const boutonsNav = [...document.querySelectorAll('.profile-nav button')];
   for (const bouton of boutonsNav) {
     bouton.addEventListener('click', () => {
-      $(bouton.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $(bouton.dataset.target)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
     });
   }
   if ('IntersectionObserver' in window) {
@@ -447,7 +477,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         const visible = entrees.find((entree) => entree.isIntersecting);
         if (!visible) return;
         for (const bouton of boutonsNav) {
-          bouton.classList.toggle('active', bouton.dataset.target === visible.target.id);
+          bouton.classList.toggle(
+            'active',
+            bouton.dataset.target === visible.target.id
+          );
         }
       },
       { root: $('profile-main'), rootMargin: '0px 0px -65% 0px' }
@@ -461,8 +494,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   function oublierRailEnCache() {
     try {
       localStorage.removeItem('chatvardage:rail-serveurs');
-    } catch {
-    }
+    } catch {}
   }
 
   const allerAuTableauDeBord = () => window.electronAPI.navigate('index.html');
@@ -540,8 +572,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const presences = await window.electronAPI.obtenirPresences();
     cocher('presence', presences?.[utilisateur?.id] ?? 'en-ligne');
-  } catch {
-  }
+  } catch {}
   afficherEntete();
   majEtatFormulaireIdentite();
   majEtatFormulaireCompte();

@@ -52,13 +52,14 @@ npm start              # mode prod : build automatique (prestart) puis Electron 
 npm test               # vitest run
 npm run test:coverage  # avec couverture : 100 % exigé sur src/**/*.ts, RealGatewayRuntime.js et runtime/ (voir vitest.config.ts)
 npm run lint            # eslint . --ext .js,.jsx,.ts,.tsx
+npm run format:check    # prettier --check .
 npx tsc --noEmit        # compilation TypeScript sans émission
 npm audit --audit-level=high  # aucune vulnérabilité high/critical (vérifié en CI)
 npm run build           # build de la page de connexion (dist/login/)
 ```
 
 **Avant de considérer une tâche terminée**, dans cet ordre :
-`npm audit --audit-level=high` → `npx tsc --noEmit` → `npm run lint` → `npm test`
+`npm audit --audit-level=high` → `npx tsc --noEmit` → `npm run lint` → `npm run format:check` → `npm test`
 (ou `test:coverage` si le changement touche la logique) → `npm run build`. Un changement qui touche
 au dashboard ou aux messages privés (JS vanilla, jamais compilé) ne sera
 détecté par **aucun** de ces outils s'il casse au runtime — le seul moyen
@@ -66,7 +67,7 @@ fiable de le vérifier est de lancer l'app et de cliquer dedans (voir
 "Piège n°1" plus bas).
 
 CI (`.github/workflows/builds.yml`) : `npm ci && npm audit --audit-level=high &&
-npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
+npm run lint && npm run format:check && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
 PR, sur `main`/`develop`, et avant tout build multiplateforme (tag `v*` ou
 lancement manuel) — la couverture (100 %), les types et le build de la page
 de connexion sont donc vérifiés en CI. Le lint échoue au moindre
