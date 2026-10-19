@@ -34,9 +34,9 @@ node scripts/start.js
 
 ```bash
 npm audit --audit-level=high
-npx tsc --noEmit
 npm run lint
 npm run format:check
+npx tsc --noEmit
 npm run test:coverage
 npm run build
 ```
@@ -45,7 +45,7 @@ Installateurs : `npm run build:win`, `npm run build:mac`, `npm run build:linux` 
 
 ## Documentation
 
-L’[architecture du frontend](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/architecture-frontend.md), le [guide détaillé](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/services/Frontend.md), le [contrat réseau](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/api/frontend.md) et la [validation fonctionnelle](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/validation.md) sont centralisés dans Infra. Voir [AGENTS.md](AGENTS.md) pour contribuer.
+L’[architecture du frontend](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/architecture-frontend.md), le [guide détaillé](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/services/Frontend.md), le [contrat réseau](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/api/frontend.md) et la [validation fonctionnelle](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/validation.md) sont centralisés dans Infra. Voir [AGENTS.md](AGENTS.md) pour contribuer et le [guide des revues GitHub](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/revues-github.md) pour configurer leur authentification.
 
 Le CI vérifie la cohérence entre la version déclarée, le fichier de verrouillage npm et les tags de publication.
 

@@ -59,7 +59,7 @@ npm run build           # build de la page de connexion (dist/login/)
 ```
 
 **Avant de considérer une tâche terminée**, dans cet ordre :
-`npm audit --audit-level=high` → `npx tsc --noEmit` → `npm run lint` → `npm run format:check` → `npm test`
+`npm audit --audit-level=high` → `npm run lint` → `npm run format:check` → `npx tsc --noEmit` → `npm test`
 (ou `test:coverage` si le changement touche la logique) → `npm run build`. Un changement qui touche
 au dashboard ou aux messages privés (JS vanilla, jamais compilé) ne sera
 détecté par **aucun** de ces outils s'il casse au runtime — le seul moyen
@@ -326,3 +326,8 @@ Les garanties de synchronisation (non-lus relus après chaque événement, lectu
 - **Canal `resumes-conversations-privees` supprimé** : les non-lus viennent du serveur.
 - **CSS `:has()`** : le Chromium d'Electron le prend en charge.
 - **Comparaison lexicographique des identifiants à date égale** : elle reproduit l'ordre serveur `(createdAt, id)` ; un tri « naturel » divergerait du contrat.
+
+- **Blocs `catch` vides** : permis pour une opération facultative avec repli explicite ou un rafraîchissement relancé par le cycle de vie (coffre indisponible, profil, présence, éléments de fenêtre). Les opérations principales de session et de messagerie doivent propager ou traiter leur erreur. Une liste de numéros de ligne ou une directive par bloc répéterait cette règle et deviendrait périmée au prochain déplacement de code.
+- **JSDoc retirés des entités** : TypeScript fournit déjà les types au survol ; ne pas remettre des commentaires qui répètent paramètres et retours sans information de contrat supplémentaire.
+- **Build Electron** : utiliser le binaire local, épinglé à la version exacte du lockfile. `npm ci` vérifie leur cohérence ; revenir à `npx --yes` ajouterait un téléchargement à l'exécution sans renforcer ce contrôle.
+- **Revues automatiques** : configuration et rotation des secrets dans le [guide Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/revues-github.md), plutôt que dans les commentaires du workflow.
