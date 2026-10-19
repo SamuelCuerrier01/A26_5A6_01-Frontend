@@ -10,11 +10,11 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-// @ts-expect-error
+// @ts-expect-error -- module CommonJS sans déclaration de types
 import { RealGatewayRuntime } from './RealGatewayRuntime.js';
-// @ts-expect-error
+// @ts-expect-error -- module CommonJS sans déclaration de types
 import { chargerJetonPersiste } from './RealGatewayRuntime.js';
-// @ts-expect-error
+// @ts-expect-error -- module CommonJS sans déclaration de types
 import { sauvegarderJetonPersiste } from './RealGatewayRuntime.js';
 
 function reponseJson(corps: unknown, statut = 200) {
