@@ -3,9 +3,6 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// Modules CommonJS du processus main, chargés avec un faux `electron` placé
-// dans le cache de require (même principe que
-// RealGatewayRuntime.couverture.test.ts).
 const requireLocal = createRequire(path.join(process.cwd(), 'package.json'));
 const cheminElectron = requireLocal.resolve('electron');
 
@@ -76,7 +73,6 @@ describe('securite (processus main)', () => {
     expect(s.isAppUrl('https://exemple.test/')).toBe(false);
     expect(s.isAppUrl('pas une url')).toBe(false);
     expect(s.isAppUrl('file://serveur/partage/x.html')).toBe(false);
-    // Serveur de dev refusé hors développement.
     expect(s.isAppUrl(`http://localhost:${s.DEV_SERVER_PORT}/`)).toBe(false);
   });
 
@@ -97,9 +93,9 @@ describe('securite (processus main)', () => {
     expect(s.isProdLoginFileUrl('pas une url')).toBe(false);
     expect(s.isProdLoginFileUrl('https://exemple.test/')).toBe(false);
     expect(s.isProdLoginFileUrl('file://serveur/partage/x.html')).toBe(false);
-    // new URL() accepte cette URL, mais fileURLToPath() refuse les séparateurs
-    // encodés. Cela couvre le chemin de sécurité qui retourne false au catch.
-    expect(s.isProdLoginFileUrl('file:///tmp/dossier%2Finterdit.html')).toBe(false);
+    expect(s.isProdLoginFileUrl('file:///tmp/dossier%2Finterdit.html')).toBe(
+      false
+    );
     expect(
       s.isPathInsideAppPages(path.join(s.APP_PAGES_ROOT, 'index.html'))
     ).toBe(true);
@@ -128,8 +124,6 @@ describe('securite (processus main)', () => {
     );
     expect(action).toHaveBeenCalledTimes(2);
 
-    // Canal « tire et oublie » : valeur de refus au lieu d'une erreur, et
-    // l'action n'est jamais appelée depuis une page non reconnue.
     const silencieuse = vi.fn(() => 'ok');
     s.exposerCanal('test:silencieux', silencieuse, { siRefuse: false });
     const silencieux = canaux.get('test:silencieux') as Gestionnaire;

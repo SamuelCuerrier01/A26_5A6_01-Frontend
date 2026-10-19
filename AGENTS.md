@@ -52,13 +52,14 @@ npm start              # mode prod : build automatique (prestart) puis Electron 
 npm test               # vitest run
 npm run test:coverage  # avec couverture : 100 % exigé sur src/**/*.ts, RealGatewayRuntime.js et runtime/ (voir vitest.config.ts)
 npm run lint            # eslint . --ext .js,.jsx,.ts,.tsx
+npm run format:check    # prettier --check .
 npx tsc --noEmit        # compilation TypeScript sans émission
 npm audit --audit-level=high  # aucune vulnérabilité high/critical (vérifié en CI)
 npm run build           # build de la page de connexion (dist/login/)
 ```
 
 **Avant de considérer une tâche terminée**, dans cet ordre :
-`npm audit --audit-level=high` → `npx tsc --noEmit` → `npm run lint` → `npm test`
+`npm audit --audit-level=high` → `npm run lint` → `npm run format:check` → `npx tsc --noEmit` → `npm test`
 (ou `test:coverage` si le changement touche la logique) → `npm run build`. Un changement qui touche
 au dashboard ou aux messages privés (JS vanilla, jamais compilé) ne sera
 détecté par **aucun** de ces outils s'il casse au runtime — le seul moyen
@@ -66,7 +67,7 @@ fiable de le vérifier est de lancer l'app et de cliquer dedans (voir
 "Piège n°1" plus bas).
 
 CI (`.github/workflows/builds.yml`) : `npm ci && npm audit --audit-level=high &&
-npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
+npm run lint && npm run format:check && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
 PR, sur `main`/`develop`, et avant tout build multiplateforme (tag `v*` ou
 lancement manuel) — la couverture (100 %), les types et le build de la page
 de connexion sont donc vérifiés en CI. Le lint échoue au moindre
@@ -147,11 +148,10 @@ src/i18n/
                                message-prive.js (pas de require(), pas de
                                bundler — voir "Piège n°2").
   → Trois implémentations de la MÊME petite fonction, une par
-    environnement de module du projet. C'est voulu, pas de la dette :
-    voir le commentaire en tête de chaque fichier. Ne jamais essayer de
-    les fusionner en un seul fichier partagé — ça a déjà cassé le build
-    de prod une fois (Rollup traite les .js source comme de l'ESM, pas
-    du CommonJS).
+    environnement de module du projet (CommonJS, ESM, script classique).
+    C'est voulu, pas de la dette. Ne jamais essayer de les fusionner en
+    un seul fichier partagé — ça a déjà cassé le build de prod une fois
+    (Rollup traite les .js source comme de l'ESM, pas du CommonJS).
 
 src/presentation/pages/
   connexion/                   Page React (Vite root). LoginPage.tsx ne
@@ -281,13 +281,15 @@ conflit Git (`<<<<<<<`, `=======`, `>>>>>>>`) ne traîne dans le diff.
 
 ## Conventions
 
-- Noms de variables, fonctions et commentaires : **en français**, dans
-  tout le code (TS et JS). Les clés de traduction elles-mêmes sont en
+- Pas de commentaires dans le code : les explications vont dans le README,
+  l'architecture d'Infra ou ce fichier. Seules restent les directives
+  d'outils (`eslint-disable-next-line`, `@ts-expect-error`).
+- Noms de variables et fonctions : **en français**, dans tout le code
+  (TS et JS). Les clés de traduction elles-mêmes sont en
   anglais (`auth.invalidFormat`, `errors.ERR_PSEUDO_PRIS`).
   Exception assumée : les identifiants de `src/partage/` sont en anglais
   (`useAsyncResource`, `loadMore`…), car ces fichiers sont copiés à
-  l'identique dans le client mobile, qui suit la convention inverse ;
-  leurs commentaires restent en français.
+  l'identique dans le client mobile, qui suit la convention inverse.
 - Aucun texte d'UI en dur dans un composant ou un template — toujours via
   `t(langue, 'cle')`. Pour le HTML statique des pages vanilla, utiliser
   les attributs `data-i18n` / `data-i18n-title` / `data-i18n-aria-label` /
@@ -306,108 +308,28 @@ conflit Git (`<<<<<<<`, `=======`, `>>>>>>>`) ne traîne dans le diff.
 
 Infra est la référence du démarrage complet, des architectures, contrats et scénarios de validation. Le README local décrit le dépôt et ses commandes; les guides détaillés sont dans `A26_5A6_01-Infra/docs/`. Toute modification de contrat doit mettre à jour la référence centrale et ses liens.
 
-## Revue PR #104 — 9 octobre 2026
+## Choix délibérés (ne pas « corriger »)
 
-- Nouveau jeton de `logout-others` vérifié avant toute modification de session ou persistance. Réponse invalide : erreur traduite de reconnexion requise, ancien état conservé, rotation terminée sans rouvrir le socket.
-- Confirmation de livraison sans identifiant ignorée : aucune requête vers `/undefined/delivered`.
-- IPv6 conservé avec `[::1]` : `URL.hostname` de Node garde les crochets, contrairement à l'affirmation de la review. Le comportement est vérifié dans le runtime Node utilisé pour les tests.
-- Pas de garde supplémentaire pour les modes de pagination : les appelants fournissent un seul mode; Message-Service rejette explicitement les combinaisons incompatibles en 400. Un nouvel appelant doit respecter ce contrat.
-- `serveur.salons` reste obligatoire : Room-Service fournit ce tableau et il est utilisé par le mapping et les adhésions Socket.IO, pas seulement le tri. Un repli local au tri masquerait un contrat invalide sans réparer ces autres consommateurs.
-- Constantes inactives des fixtures et structure du bloc de déconnexion conservées : aucun défaut de comportement ou de rendu établi par la review. La déconnexion est un bouton d'action, sans formulaire à soumettre.
+Les garanties de synchronisation (non-lus relus après chaque événement, lecture bornée au dernier message rendu, position de lecture monotone, état d'historique propre à chaque ouverture) sont décrites dans l'[architecture d'Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/architecture-frontend.md#flux-importants). Les points ci-dessous ont été relevés en revue et volontairement gardés :
 
-Validation de cette review sous Node 22.23.2 : audit high, types, lint, build et 405 tests avec couverture 100 % passent. Le hostname IPv6 testé est `[::1]`. Validation manuelle Electron non effectuée.
+- **IPv6 avec `[::1]`** : `URL.hostname` de Node garde les crochets.
+- **Pas de garde supplémentaire pour les modes de pagination** : chaque appelant fournit un seul mode et Message-Service rejette les combinaisons incompatibles (400).
+- **`serveur.salons` obligatoire** : Room-Service le fournit et il sert aussi aux adhésions Socket.IO ; un repli local masquerait un contrat invalide.
+- **Pas de boucle de profil** : `definirPresenceInterne` n'appelle pas `annoncerProfil` ; seule `modifierPresence` annonce une action locale.
+- **Confirmations de livraison individuelles** : elles ignorent déjà les messages sortants et livrés, sur des pages de 50 ; un envoi groupé demanderait un nouveau contrat.
+- **Alias `counter` dans `src/partage/useAsyncResource.ts`** : il capture la référence utilisée par le nettoyage de l'effet, conformément au lint des hooks. Fichier partagé avec Mobile.
+- **URL invalide refusée au démarrage par `URL`**, sans afficher la valeur brute (elle pourrait contenir des identifiants).
+- **`versConversationLocale` sans garde de session** : son appelant `obtenirNonLus` vérifie la session.
+- **`totalNonLus` refuse un type inconnu** : accepter une valeur hors contrat masquerait une erreur d'appel.
+- **Pas de repli à zéro dans `Math.max` des lectures** : `traiterLectureEntrante` fournit une date numérique et Message-Service valide les dates à la source.
+- **Minuteur de recherche après fermeture du dialogue** : il peut lancer une requête bornée de plus, sans fuite ni changement de conversation.
+- **Canal `resumes-conversations-privees` supprimé** : les non-lus viennent du serveur.
+- **CSS `:has()`** : le Chromium d'Electron le prend en charge.
+- **Comparaison lexicographique des identifiants à date égale** : elle reproduit l'ordre serveur `(createdAt, id)` ; un tri « naturel » divergerait du contrat.
 
-## Nouvelle revue PR #104 — tri de pagination
+- **Blocs `catch` vides** : permis pour une opération facultative avec repli explicite ou un rafraîchissement relancé par le cycle de vie (coffre indisponible, profil, présence, éléments de fenêtre). Les opérations principales de session et de messagerie doivent propager ou traiter leur erreur. Une liste de numéros de ligne ou une directive par bloc répéterait cette règle et deviendrait périmée au prochain déplacement de code.
+- **JSDoc retirés des entités** : TypeScript fournit déjà les types au survol ; ne pas remettre des commentaires qui répètent paramètres et retours sans information de contrat supplémentaire.
+- **Build Electron** : utiliser le binaire local, épinglé à la version exacte du lockfile. `npm ci` vérifie leur cohérence ; revenir à `npx --yes` ajouterait un téléchargement à l'exécution sans renforcer ce contrôle.
+- **Revues automatiques** : configuration et rotation des secrets dans le [guide Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/c5fc686f262127f7985684d8df3739b549255eea/docs/revues-github.md), plutôt que dans les commentaires du workflow.
 
-- Les deux fusions de pages récentes de salon utilisent explicitement `date`; le curseur est donc le dernier message chronologique. La pagination récente DM/salon abandonne un historique vidé sans erreur ni requête invalide. Tests exécutant les fonctions des pages avec la vraie fusion.
-- Boucle de profil non retenue : `definirPresenceInterne` n'appelle pas `annoncerProfil`; seule `modifierPresence` annonce une action locale. `configObtenir` normalise aussi le statut. La review confond ces deux méthodes.
-- Confirmation groupée différée : les confirmations individuelles ignorent déjà les messages sortants et livrés; la page est bornée à 50. Un batch nécessiterait un nouveau contrat backend sans défaut fonctionnel démontré dans cette review.
-- Alias `counter` conservé : capture de la référence utilisée par le nettoyage de l'effet, équivalente fonctionnellement et conforme au lint des hooks. Aucun comportement à corriger; modifier un fichier partagé imposerait en plus une coordination Mobile inutile.
-- URL invalide déjà refusée au démarrage par `URL` : personnaliser ce texte opérateur est facultatif et la suggestion inclut la valeur brute, pouvant exposer des identifiants.
-- Journal des décisions maintenu dans AGENTS conformément à la demande explicite de l'utilisateur.
-
-Validation : audit high, types, lint, build et 408 tests à couverture 100 % sous Node 22.23.2. Les nouvelles régressions exécutent les fonctions des pages; validation manuelle Electron non effectuée.
-
-## Revue PR #100 — décisions du 6 octobre 2026
-
-- Réponses HTTP vides : correction retenue pour les non-lus et les lecteurs, y compris le DM (204 produit undefined dans appelHttp). Tests de régression pour 204 et JSON null.
-- versConversationLocale sans session : pas de garde supplémentaire; son appelant obtenirNonLus vérifie la session avant de convertir les identifiants. Aucun autre appel de production ne nécessite ce cas.
-- totalNonLus avec un type inconnu : pas de changement; les appelants utilisent salon ou prive. Accepter silencieusement une valeur hors contrat masquerait une erreur d'appel.
-- Math.max avec une lecture absente : pas de repli à zéro; traiterLectureEntrante fournit une date numérique. La validation des dates Redis est renforcée dans Message-Service, à la source. Un repli nullish ne corrigerait d'ailleurs pas NaN.
-- Minuteur après fermeture de recherche : reporté; il peut déclencher une requête bornée supplémentaire, sans fuite de données ni changement de conversation. Ce coût ponctuel ne justifie pas de modifier le cycle de vie du dialogue dans cette correction.
-- Suppression du canal resumes-conversations-privees : conservée; la recherche dans les fichiers de production ne trouve plus de consommateur. La suppression est intentionnelle, les non-lus viennent du serveur.
-- CSS :has() : conservé; Electron embarque une version de Chromium compatible (voir la version Electron de package.json).
-
-Validation : Node 22.23.2, npm ci --ignore-scripts, audit high, TypeScript, lint, 263 tests (couverture 100 %) et build passent. Le lockfile met à jour uniquement http-cache-semantics 4.2.0 vers 4.3.0 et source-map-js 1.2.1 vers 1.2.2 pour retirer les deux avis high. Il reste huit avis modérés. La première tentative de tests sous Node 18 échouait au chargement de Vitest; Node 22 est requis par le projet. Les changements concernent le runtime main testé, sans modification des pages; pas de validation manuelle Electron effectuée.
-
-### Nouvelle revue PR #100
-- Style des compteurs : préfixe #user-panel parasite retiré.
-- Recherche : réponses invalidées dès la saisie, pagination masquée et terme capturé par requête.
-- Marquage échoué : compteur restauré, messages arrivés pendant la requête conservés et tentative suivante permise; une seule requête en cours par conversation.
-Validation : audit high, types, lint, 265 tests, couverture 100 % et build passent sous Node 22. Les pages sont vérifiées par les tests jsdom; validation manuelle Electron non effectuée.
-
-
-### Suite de la revue PR #100 — position et synchronisation des lectures
-
-Accusés : position complète propagée jusqu’aux coches et « Vu par », fusion monotone des réponses HTTP avec le temps réel, initialisation avant la requête et rejet des réponses d’une ancienne ouverture. Frontière des non-lus figée par identifiant. Marquage réussi : réponse réconciliée, nouveaux messages marqués ensuite seulement si la conversation est encore affichée au premier plan.
-
-Validation locale sous Node 24 : audit high, types (Frontend), lint, tests avec couverture et build. La validation manuelle Electron n’a pas été effectuée. Tests PostgreSQL non exécutés : aucune DATABASE_URL de test disponible et démarrage de la base jetable empêché par les permissions de l’environnement. La validation d’intégration reste requise avant fusion.
-
-
-### Revue suivante PR #100 — rechargement des non-lus et reconnexion
-
-Une réponse de non-lus dépassée par une autre requête est ignorée. Une réception ou un marquage local pendant le chargement impose une relecture serveur, bornée à une relance; si les deux réponses deviennent périmées, les compteurs locaux sont conservés jusqu’à la synchronisation suivante. Après reconnexion, la conversation active recharge aussi ses accusés de lecture, en conservant sa position monotone pendant la requête.
-
-Validation de cette suite : audit high, types, lint, 277 tests avec couverture 100 % et build passent sous Node 24. Validation manuelle Electron non effectuée.
-
-
-### Suite de revue du 6 octobre — concurrence et contrat PUT
-
-Les chargements de non-lus préservent les conversations dont le PUT de lecture est en cours. Si un chargement a exclu une conversation, son état est rechargé après la résolution du PUT, avant de rafraîchir les badges ou de retenter une lecture. Régressions couvertes : succès et échec après réception d’un message et abandon de la conversation. Validation : audit high, types, lint, build et 279 tests à couverture 100 % passent sous Node 24. Test manuel Electron non exécuté.
-
-### Suite de revue — compteur autoritaire et libellé de lecture
-
-Après un PUT réussi pour une conversation qui n’est plus affichée, les non-lus sont relus pour distinguer un message arrivé avant ou après la position enregistrée par le serveur. Cela supprime les badges fantômes lorsque la conversation a été quittée et conserve la relance si elle reste affichée. Le contrat expose la position du dernier message lu, pas l’heure de l’action de lecture : l’interface affiche donc « Lu » / « Read » plutôt qu’une heure d’envoi présentée comme heure de lecture.
-
-Validation : audit high, types, lint, build et 280 tests avec couverture 100 % passent sous Node 24. Test manuel Electron non exécuté.
-\n\n
-
-### Navigation pendant les attentes
-
-La relance d’un PUT de lecture réévalue le focus et la conversation affichée après la relecture HTTP. Un saut vers un résultat de recherche conserve l’identifiant initial et s’arrête sans notification si la conversation change pendant la pagination, pour les DM comme les salons. Trois régressions simulent ces changements pendant les requêtes. Validation : audit high, types, lint, build et 283 tests avec couverture 100 % passent sous Node 24; validation manuelle Electron non effectuée.
-
-### Recherche pendant une pagination
-
-Les appels de pagination partagent la promesse en cours pour la même conversation : un saut de recherche attend donc le chargement déclenché par le défilement avant de reprendre, au lieu de conclure que le message est absent. L’ouverture d’un résultat DM vérifie aussi la conversation active après le rendu initial. Trois régressions couvrent le partage des requêtes DM/salon et une navigation pendant l’ouverture. Validation manuelle Electron non effectuée.
-
-Validation : audit high, types, lint, build et 286 tests avec couverture 100 % passent sous Node 24.
-
-### Suppression des messages et non-lus
-
-Après chaque événement de suppression, les deux pages relisent les compteurs serveur, même si le message ne figure pas dans leur cache, puis mettent à jour les compteurs, le rail et le badge de l’application. Aucun décrément local : un message supprimé peut déjà être lu ou être absent de la fenêtre d’historique. Deux régressions couvrent les pages salons et DM avec une réponse serveur différée.
-
-Validation : audit high, types, lint, build et 288 tests avec couverture 100 % passent sous Node 24. Validation manuelle Electron non effectuée.
-
-### Lecture bornée au dernier message rendu
-
-Le marquage intervient après la construction des messages de la page et transmet l’identifiant du dernier message enregistré rendu, jamais celui d’un brouillon non livré. Le gateway exige cet identifiant et le transmet dans le PUT : un message ajouté côté serveur avant la requête mais pas encore affiché reste non lu. Une lecture en cours mémorise le rendu suivant et ne se relance que si la borne affichée change. Les tests couvrent les bornes DM/salon, les arrivées sans rendu et le rendu suivant pendant un PUT.
-
-Validation : audit high, types, lint, build et 290 tests avec couverture 100 % passent sous Node 24. Validation manuelle Electron non effectuée. Le contrat messageId existe déjà dans Message-Service #9, désormais fusionnée; aucune modification de cette PR fermée.
-
-### Pagination et réouverture
-
-Chaque pagination et saut de recherche conserve l’objet d’historique propre à son ouverture. La réouverture remplace cet objet : les anciennes réponses, erreurs et finalisations sont ignorées, même avec le même identifiant de conversation. Les promesses de pagination ne sont partagées qu’au sein de cette ouverture; une ancienne réponse ne peut ni créer un trou ni arrêter ou libérer la nouvelle requête. Quatre régressions couvrent les DM et salons, la conservation du curseur récent et l’annulation des anciens sauts.
-
-Validation : audit high, types, lint, build et 294 tests avec couverture 100 % passent sous Node 24. Validation manuelle Electron non effectuée.
-
-### Événement reçu après un snapshot de non-lus
-
-Un message reçu peut déjà figurer dans les compteurs HTTP : son incrément local est donc provisoire. Après le traitement de chaque événement d’autrui, les deux pages relisent les non-lus serveur puis rafraîchissent les compteurs, le rail et le badge de l’application. Les gardes existantes protègent les réceptions et PUT concurrents; en cas d’échec HTTP, les compteurs locaux sont conservés. Quatre régressions distinguent les événements déjà inclus d’un nouveau message, pour les DM et salons. Les doublures des pages suivent maintenant les compteurs serveur après chaque événement.
-
-Validation : audit high, types, lint, build et 298 tests avec couverture 100 % passent sous Node 24. Validation manuelle Electron non effectuée.
-
-### Vérification du tri des lectures et des dates entrantes
-
-La comparaison lexicographique des identifiants à dates égales est conservée : elle reproduit le contrat serveur `(createdAt, id)`, son `orderBy` et ses filtres `id > lastReadMessageId`. Un tri numérique naturel de m2/m10 divergerait de ce contrat; les identifiants ne définissent jamais seuls la chronologie. Le séparateur de non-lus est fixé par identifiant et ne dépend pas de ces comparaisons.
-
-Les événements de lecture vérifient désormais Number.isFinite après Date.parse avant toute résolution de lecteur ou émission vers les pages. Les dates vides, non interprétables et hors plage sont ignorées; les régressions sont ajoutées au test de relais existant. Validation : audit high, types, lint, build et 298 tests avec couverture 100 % passent sous Node 24. Validation manuelle Electron non effectuée.
+- **Déconnexion de la session renouvelable** : `POST /api/auth/logout` reçoit `refresh_token` dans le corps JSON ; le contrôleur Auth ne demande pas de Bearer. L’effacement local précède cet appel pour fermer immédiatement la session, même hors réseau. Ajouter l’ancien accès dans l’en-tête ne corrigerait pas le contrat de révocation.

@@ -1,5 +1,3 @@
-// Processus main d'Electron, découpé en modules (voir main.js et
-// A26_5A6_01-Infra/docs/architecture-frontend.md). Session (connexion, déconnexion) et relais des événements du gateway.
 const { etat, MODE_NOTIFICATION_PAR_DEFAUT } = require('./contexte');
 const { chatGateway } = require('./gateway');
 const { exposerCanal } = require('./securite');
@@ -11,15 +9,6 @@ const {
 
 const MOTIFS_VALIDES_RETOUR_CONNEXION = ['session-expiree', 'session-inactive'];
 
-// --- Session (écran de connexion) -------------------------------------------
-// chatGateway est une INSTANCE UNIQUE, partagée par la page de connexion et
-// le dashboard (contrairement à une instance par renderer, qui perdrait
-// l'utilisateur créé dès la navigation vers le dashboard — voir l'incident
-// "connecté en tant qu'alice par défaut"). C'est pour ça que ces canaux
-// vivent ici, dans le même fichier que les canaux 'salons:*'.
-//
-// Authentification par pseudo OU courriel + mot de passe (voir
-// AuthGateway.ts / RealGatewayRuntime.authentifier pour le contrat complet).
 exposerCanal('session:authentifier', ({ identifiant, motDePasse }) =>
   chatGateway
     .authentifier({ identifiant, motDePasse })
@@ -27,10 +16,6 @@ exposerCanal('session:authentifier', ({ identifiant, motDePasse }) =>
       apresOuvertureSessionAvecLangueChoisie(etat.langueChoisieAvantConnexion)
     )
 );
-// Écran d'inscription (courriel + mot de passe, pseudo par défaut généré
-// côté renderer — voir genererPseudoParDefaut — et transmis ici ; le pseudo
-// choisi ici n'est qu'un point de départ, modifiable ensuite sur l'écran
-// "Choisis ton pseudo" ou la page profil).
 exposerCanal('session:inscription', ({ courriel, motDePasse, pseudo }) =>
   chatGateway
     .inscrire({ courriel, motDePasse, pseudo })
@@ -38,25 +23,15 @@ exposerCanal('session:inscription', ({ courriel, motDePasse, pseudo }) =>
       apresOuvertureSessionAvecLangueChoisie(etat.langueChoisieAvantConnexion)
     )
 );
-// Reprend une session déjà ouverte lors d'un lancement précédent (jeton
-// persisté sur disque), appelé par la page de connexion au démarrage pour
-// sauter directement au tableau de bord si possible.
 exposerCanal('session:restaurer', () =>
   chatGateway.restaurerSession().then(apresOuvertureSession)
 );
-// Déconnexion explicite (voir page profil) : ferme le socket, efface le
-// jeton en mémoire et sur disque.
-/** Préférences propres au compte : on ne les laisse pas fuiter vers le
- * compte suivant. Thème et langue restent tels quels (écran de connexion). */
 function oublierPreferencesDuCompte() {
   etat.modeNotificationActuel = MODE_NOTIFICATION_PAR_DEFAUT;
   etat.aliasActuel = null;
   etat.avatarActuel = null;
 }
 
-// Le motif est lu plus tard par la page de connexion lors du retour automatique
-// sur l'écran de connexion (voir obtenirMotifRetourConnexion / App dans
-// connexion/main.tsx) pour afficher le message adapté à la raison du retour.
 exposerCanal('session:definir-motif-retour', ({ motif }) => {
   if (
     typeof motif === 'string' &&
@@ -80,7 +55,6 @@ exposerCanal('session:deconnexion-partout', async () => {
   etat.cibleNavigation = null;
 });
 
-// Les autres appareils sont déconnectés ; celui-ci garde sa session.
 exposerCanal('session:deconnexion-autres', () =>
   chatGateway.deconnexionAutres()
 );
@@ -91,18 +65,10 @@ exposerCanal('navigation:motif-retour-connexion', () => {
   return motif;
 });
 
-// Utilisé par le dashboard au démarrage pour savoir qui vient de se
-// connecter, au lieu de coder un utilisateur en dur (voir renderer.js).
 exposerCanal('session:utilisateur-connecte', () =>
   chatGateway.obtenirUtilisateurConnecte()
 );
 
-// Le runtime émet les transitions avant même que l'appel IPC de reconnexion
-// soit terminé, ce qui permet à l'UI d'afficher réellement « Reconnexion ».
-// Jeton expiré ou révoqué en cours d'utilisation (voir
-// RealGatewayRuntime.verifierSessionApres401) : la session est déjà fermée
-// côté gateway ; on ramène l'app à l'écran de connexion, qui explique
-// pourquoi (motifRetourConnexion).
 chatGateway.on('session-expiree', () => {
   oublierPreferencesDuCompte();
   etat.cibleNavigation = null;
@@ -115,15 +81,11 @@ chatGateway.on('etat-connexion', (etatConnexion) => {
     etat.mainWindow.webContents.send('reseau:etat-change', etatConnexion);
   }
 });
-// Avatar ou alias d'autres utilisateurs modifié (voir
-// chargerProfilsPublics) : les pages redessinent les photos concernées.
 chatGateway.on('profils-publics', (ids) => {
   if (etat.mainWindow && !etat.mainWindow.isDestroyed()) {
     etat.mainWindow.webContents.send('utilisateurs:profils-change', ids);
   }
 });
-// Changement dans un serveur (membres, salons, invitation, expulsion…),
-// signalé en temps réel : les pages rechargent leur état.
 chatGateway.on('serveur-change', (evenement) => {
   if (etat.mainWindow && !etat.mainWindow.isDestroyed()) {
     etat.mainWindow.webContents.send('serveurs:change', evenement);
@@ -147,18 +109,12 @@ chatGateway.on('message-supprime', (message) => {
     etat.mainWindow.webContents.send('messages:supprime-change', message);
   }
 });
-// Nouveau message reçu en temps réel (salon ou DM), poussé par le WebSocket
-// Serveur-API. Voir javascript/salons/temps-reel.js et
-// message-prive.js pour le traitement (ajout à la conversation affichée,
-// notification système si hors focus).
 chatGateway.on('message-recu', (payload) => {
   if (etat.mainWindow && !etat.mainWindow.isDestroyed()) {
     etat.mainWindow.webContents.send('messages:nouveau', payload);
   }
 });
 
-// Accusé de lecture (voir traiterLectureEntrante) : ✓✓ des messages privés,
-// « Vu par » des salons, non-lus lus depuis un autre appareil.
 chatGateway.on('lecture', (lecture) => {
   if (etat.mainWindow && !etat.mainWindow.isDestroyed()) {
     etat.mainWindow.webContents.send('messages:lecture-change', lecture);

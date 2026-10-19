@@ -256,7 +256,7 @@ it.each(['Dm', 'Salon'])(
       })
     );
     expect(rendre).toHaveBeenCalledTimes(rendusAvant);
-    expect(charger()).toBe(recente); // L'ancienne réponse ne libère pas la nouvelle requête.
+    expect(charger()).toBe(recente);
     reponses[1]({
       messages: [{ id: 'page-intermediaire' }],
       finHistorique: false,

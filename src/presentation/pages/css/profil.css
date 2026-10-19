@@ -1,13 +1,4 @@
-/* Page profil (profil.html) : réutilise les variables de thème et le rail de
-   navigation de styles.css (--bg-app/--bg-panel/--text-primary/etc., déjà
-   posées sur <html> par ThemeManager — voir theme-browser.js), avec sa
-   propre mise en page : un en-tête d'identité, puis une navigation latérale
-   par section et les sections elles-mêmes. */
-
 body {
-  /* Le défilement se fait uniquement dans #profile-main. `clip` (et non
-     `hidden`) interdit aussi tout défilement programmatique du body
-     (focus, scrollIntoView). */
   overflow: clip;
   background: var(--bg-app);
 }
@@ -45,7 +36,6 @@ body {
   gap: 24px;
 }
 
-/* --- En-tête d'identité ---------------------------------------------- */
 .profile-hero {
   display: flex;
   align-items: center;
@@ -112,8 +102,6 @@ body {
   object-fit: cover;
 }
 
-/* Input fichier caché mais toujours focusable au clavier (Tab), contrairement
-   à `hidden` ou `display: none`. */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -189,7 +177,6 @@ body {
   gap: 8px;
 }
 
-/* --- Mise en page : navigation + sections ------------------------------ */
 .profile-layout {
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);
@@ -242,7 +229,6 @@ body {
   gap: 20px;
 }
 
-/* --- Sections -------------------------------------------------------- */
 .profile-section {
   scroll-margin-top: 16px;
   background: var(--bg-panel);
@@ -297,7 +283,6 @@ body {
   color: var(--danger-text);
 }
 
-/* --- Champs ----------------------------------------------------------- */
 .field {
   display: flex;
   flex-direction: column;
@@ -312,7 +297,6 @@ body {
   display: none;
 }
 
-/* Enfants directs uniquement : les cartes de choix sont aussi des <label>. */
 .field > label,
 .field > legend {
   padding: 0;
@@ -345,8 +329,6 @@ body {
     box-shadow 0.15s ease;
 }
 
-/* Champ en lecture seule (courriel, non modifiable) : visiblement inactif,
-   sans l'effet de focus des champs éditables. */
 .profile-section input[readonly] {
   background: var(--hover);
   color: var(--text-muted);
@@ -407,7 +389,6 @@ body {
   color: var(--text-muted);
 }
 
-/* --- Cartes de choix (thème, notifications) ------------------------------ */
 .choice-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -472,7 +453,6 @@ body {
   line-height: 1.35;
 }
 
-/* Carte de thème : aperçu miniature au lieu d'une description. */
 .theme-card {
   flex-direction: column;
   align-items: stretch;
@@ -497,8 +477,6 @@ body {
   border-radius: 4px;
 }
 
-/* Couleurs figées (et non les variables) : chaque aperçu montre son thème,
-   quel que soit le thème actif. */
 .theme-preview--sombre {
   background: #0a5447;
 }
@@ -507,7 +485,12 @@ body {
   background: #0d3d38;
 }
 .theme-preview--sombre span:nth-child(3) {
-  background: linear-gradient(#0e453e 0 30%, transparent 30% 45%, #3ddc97 45% 55%, transparent 55%);
+  background: linear-gradient(
+    #0e453e 0 30%,
+    transparent 30% 45%,
+    #3ddc97 45% 55%,
+    transparent 55%
+  );
 }
 
 .theme-preview--clair {
@@ -518,10 +501,14 @@ body {
   background: #e3f6ef;
 }
 .theme-preview--clair span:nth-child(3) {
-  background: linear-gradient(#f5fcf9 0 30%, transparent 30% 45%, #15a383 45% 55%, transparent 55%);
+  background: linear-gradient(
+    #f5fcf9 0 30%,
+    transparent 30% 45%,
+    #15a383 45% 55%,
+    transparent 55%
+  );
 }
 
-/* --- Contrôle segmenté (langue) ------------------------------------------ */
 .segmented {
   display: inline-flex;
   align-self: flex-start;
@@ -531,9 +518,6 @@ body {
   background: var(--bg-panel-alt);
 }
 
-/* position: relative indispensable : sans ancêtre positionné, l'<input>
-   absolu est placé par rapport au document, et le focus au clic faisait
-   défiler TOUTE la page (body compris) au lieu de #profile-main. */
 .segmented label {
   position: relative;
   cursor: pointer;
@@ -567,7 +551,6 @@ body {
   outline-offset: 1px;
 }
 
-/* Présence : pastille verte / grise dans chaque option. */
 .segmented--presence span {
   display: flex;
   align-items: center;
@@ -589,8 +572,6 @@ body {
   background: var(--online);
 }
 
-/* Sur le fond --primary de l'option cochée : pastilles éclaircies pour
-   rester lisibles. */
 .segmented--presence input:checked + span .presence-dot {
   background: color-mix(in srgb, var(--on-primary) 70%, transparent);
 }
@@ -599,7 +580,6 @@ body {
   background: #86efac;
 }
 
-/* --- Boutons ------------------------------------------------------------ */
 .profile-section .primary-button {
   min-width: 120px;
   padding: 9px 16px;
@@ -674,9 +654,6 @@ body {
   font-weight: 600;
 }
 
-/* .confirm-delete-row est définie dans styles.css (réutilisée ici). */
-
-/* --- Écrans étroits ------------------------------------------------------ */
 @media (max-width: 760px) {
   #profile-main {
     padding: 20px 16px 48px;

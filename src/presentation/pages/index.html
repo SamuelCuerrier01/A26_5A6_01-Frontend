@@ -9,8 +9,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChatVardage</title>
     <link rel="stylesheet" href="css/styles.css" />
-    <!-- Chargé AVANT le premier rendu : applique le thème mémorisé (voir
-         theme-browser.js), sinon flash du thème sombre à la navigation. -->
     <script src="javascript/theme-browser.js"></script>
   </head>
   <body>
@@ -28,8 +26,6 @@
         <span class="notif-dot notif-dot--rail" hidden></span>
       </button>
       <div class="rail-divider"></div>
-      <!-- Icônes des serveurs insérées ici par le JS
-           (ChatUiShared.afficherRailServeurs), avant le « + ». -->
       <button
         id="open-create-channel-rail"
         class="server-icon server-icon--add"
@@ -44,8 +40,6 @@
 
     <aside id="channel-sidebar">
       <div class="sidebar-header">
-        <!-- Nom du serveur actif : ouvre son menu (paramètres, inviter,
-             quitter, supprimer selon le rôle). -->
         <button
           id="server-menu-btn"
           class="server-menu-btn"
@@ -73,8 +67,6 @@
         <span id="invitation-count" class="badge" hidden>0</span>
       </button>
       <div id="user-panel">
-        <!-- Photo (ou initiale) + pastille de présence : voir
-             ChatUiShared.afficherAvatarCourant. -->
         <div id="current-user-avatar" class="avatar user-avatar"></div>
         <div class="user-info">
           <div class="current-user-row">
@@ -235,8 +227,8 @@
               <span
                 class="notif-menu-option-desc"
                 data-i18n="notifications.previewDesc"
-                >Le texte du message apparaît dans la notification système,
-                même sur un écran verrouillé</span
+                >Le texte du message apparaît dans la notification système, même
+                sur un écran verrouillé</span
               >
             </span>
           </label>
@@ -307,7 +299,11 @@
             <span class="dot" aria-hidden="true"></span>
             <span class="connection-text">
               <span id="connection-label"></span>
-              <span id="connection-detail" class="connection-detail" hidden></span>
+              <span
+                id="connection-detail"
+                class="connection-detail"
+                hidden
+              ></span>
             </span>
             <button
               id="connection-retry"
@@ -375,12 +371,9 @@
       </form>
     </dialog>
 
-    <!-- Recherche de messages (ChatUiShared.brancherRechercheMessages) :
-         dans le salon ou la conversation privée affichée. -->
     <dialog id="search-dialog" class="search-dialog">
       <div class="search-panel">
         <div class="dialog-header">
-          <!-- Rempli à l'ouverture : « Rechercher dans <conversation> ». -->
           <h2 class="search-title">Rechercher dans les messages</h2>
           <button
             type="button"
@@ -420,8 +413,6 @@
     <script src="javascript/i18n-browser.js"></script>
     <script src="javascript/chat-ui-shared.js"></script>
     <script src="javascript/logique-interface.js"></script>
-    <!-- Page des salons : scripts classiques, dans CET ordre (voir l'en-tête
-         de javascript/salons/etat.js) ; renderer.js la démarre, en dernier. -->
     <script src="javascript/salons/etat.js"></script>
     <script src="javascript/salons/historique.js"></script>
     <script src="javascript/salons/affichage.js"></script>

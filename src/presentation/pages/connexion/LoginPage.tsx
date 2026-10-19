@@ -10,30 +10,17 @@ import mascotLogo from '../../../../assets/icon.png';
 import type { AuthGateway } from '../../../infrastructure/gateways/AuthGateway';
 import { t, LANGUES_SUPPORTEES } from '../../../i18n/i18n-web';
 
-/**
- * Sous-ensemble de AuthGateway réellement nécessaire à cet écran (principe
- * de ségrégation d'interface, voir AuthGateway.ts).
- */
 export type GatewaySession = Pick<AuthGateway, 'authentifier'>;
 
 type LoginPageProps = {
   gateway: GatewaySession;
-  /** Langue actuelle ('fr' ou 'en'), pilotée par le composant parent (voir main.tsx). */
   langue: string;
-  /** Demande un changement de langue ; le parent est responsable de le confirmer via l'IPC. */
   changerLangue: (langue: string) => void;
-  /** Appelé une fois la session établie ; par défaut, redirige vers le tableau de bord via electronAPI. */
   onSessionEtablie?: () => void;
-  /** Bascule vers l'écran d'inscription (voir main.tsx / InscriptionPage.tsx). */
   allerAInscription: () => void;
-  /** Clé de traduction d'un message d'information à afficher en arrivant
-   * (ex. 'auth.sessionExpired'), ou null. */
   messageRetour?: string | null;
 } & (
   | {
-      /** Quand ce flag est activé, la modale exige une confirmation explicite.
-       * La référence de callback doit être stable (mémorisée par le parent),
-       * sinon le focus trap peut se réinitialiser à chaque rendu. */
       messageRetourConfirmable: true;
       onMessageRetourConfirme: () => void;
     }
@@ -43,23 +30,10 @@ type LoginPageProps = {
     }
 );
 
-
 interface ErreurSoumission {
-  /** Clé de traduction (ex. "auth.invalidFormat") ou code brut venant du
-   * backend (ex. "ERR_IDENTIFIANTS_INVALIDES") — jamais un texte déjà
-   * traduit, pour que le message affiché se retraduise tout seul si la
-   * langue change après coup (voir traduireErreurSoumission ci-dessous). */
   cle: string;
 }
 
-/**
- * Traduit erreurSoumission.cle dans la langue COURANTE (recalculé à chaque
- * rendu, jamais mis en cache) : (1) une clé de validation locale connue
- * (ex. "auth.invalidFormat"), ou (2) un code d'erreur backend au format
- * "errors.CODE" (voir nettoyerPrefixeIpc dans main.tsx, qui ne traduit plus
- * rien lui-même). Repli sur un message générique traduit si le code est
- * inconnu, plutôt qu'afficher une clé technique brute à l'utilisateur.
- */
 function traduireErreurSoumission(
   langue: string,
   erreur: ErreurSoumission
@@ -69,7 +43,9 @@ function traduireErreurSoumission(
   }
   const cleTraduction = `errors.${erreur.cle}`;
   const brutTraduit = t(langue, cleTraduction);
-  return brutTraduit === cleTraduction ? t(langue, 'errors.generic') : brutTraduit;
+  return brutTraduit === cleTraduction
+    ? t(langue, 'errors.generic')
+    : brutTraduit;
 }
 
 const SELECTEUR_FOCUSABLES =
@@ -101,17 +77,18 @@ export function gererFocusTrapRetourSession(
   const firstFocusableActuel = focusablesActuels[0];
   const lastFocusableActuel = focusablesActuels[focusablesActuels.length - 1];
   const currentTarget = document.activeElement as HTMLElement | null;
-  const doitRebouclement =
-    event.shiftKey
-      ? !dialog.contains(currentTarget) || currentTarget === firstFocusableActuel
-      : !dialog.contains(currentTarget) || currentTarget === lastFocusableActuel;
+  const doitRebouclement = event.shiftKey
+    ? !dialog.contains(currentTarget) || currentTarget === firstFocusableActuel
+    : !dialog.contains(currentTarget) || currentTarget === lastFocusableActuel;
 
   if (!doitRebouclement) {
     return;
   }
 
   event.preventDefault();
-  const cibleFocus = event.shiftKey ? lastFocusableActuel : firstFocusableActuel;
+  const cibleFocus = event.shiftKey
+    ? lastFocusableActuel
+    : firstFocusableActuel;
   cibleFocus.focus();
 }
 
@@ -143,7 +120,9 @@ export function LoginPage({
 
     const dialog = dialogRef.current;
     const previousActiveElement = document.activeElement as HTMLElement | null;
-    const focusables = Array.from(dialog.querySelectorAll<HTMLElement>(SELECTEUR_FOCUSABLES));
+    const focusables = Array.from(
+      dialog.querySelectorAll<HTMLElement>(SELECTEUR_FOCUSABLES)
+    );
     const firstFocusable = focusables[0] ?? dialog;
     firstFocusable.focus();
 
@@ -219,7 +198,6 @@ export function LoginPage({
         ))}
       </div>
 
-
       <div className="login-brand">ChatVardage</div>
       <form className="login-card" onSubmit={handleSubmit} noValidate>
         <img
@@ -229,7 +207,9 @@ export function LoginPage({
           aria-hidden="true"
         />
 
-        <label htmlFor="identifiant-input">{t(langue, 'auth.fieldLabel')}</label>
+        <label htmlFor="identifiant-input">
+          {t(langue, 'auth.fieldLabel')}
+        </label>
         <input
           id="identifiant-input"
           name="identifiant"
@@ -309,7 +289,10 @@ export function LoginPage({
             <h2 id={messageRetourTitreId} className="session-return-title">
               {t(langue, 'auth.sessionReturnTitle')}
             </h2>
-            <p id={messageRetourDescriptionId} className="session-return-message">
+            <p
+              id={messageRetourDescriptionId}
+              className="session-return-message"
+            >
               {t(langue, messageRetour)}
               <span className="session-return-hint">
                 {t(langue, 'auth.sessionInactiveDismissHint')}

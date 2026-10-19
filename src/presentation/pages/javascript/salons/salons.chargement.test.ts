@@ -3,19 +3,12 @@ import path from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Test d'intégration de la page des salons (index.html) : tous ses scripts
-// classiques sont exécutés DANS L'ORDRE d'index.html, comme de vrais
-// <script> (même portée globale partagée que dans Electron), avec une fausse
-// API Electron. Vérifie le contrat du découpage de renderer.js (aucune
-// référence cassée au chargement) et le comportement temps réel de la page.
-
 const PAGES = path.resolve(__dirname, '../..');
 const RACINE = path.resolve(PAGES, '../../..');
 const traductions = JSON.parse(
   readFileSync(path.join(RACINE, 'src/i18n/translations.json'), 'utf8')
 );
 
-// Même ordre que index.html (theme-browser.js est chargé dans <head>).
 const SCRIPTS = [
   'javascript/theme-browser.js',
   'javascript/notif-prefs.js',
@@ -96,7 +89,6 @@ function etatInitial(monRole = 'membre') {
 
 type Rappel = (donnees?: unknown) => unknown;
 
-// Pages ouvertes par les tests, fermées après chacun (minuteurs de la page).
 const pagesOuvertes: JSDOM[] = [];
 
 async function chargerPage({
@@ -111,17 +103,12 @@ async function chargerPage({
   const dom = new JSDOM(html, {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
-    // http (et non file://) : jsdom refuse sessionStorage aux origines
-    // opaques, contrairement à Electron.
     url: 'http://localhost/index.html',
     virtualConsole: consoleVirtuelle,
   });
   pagesOuvertes.push(dom);
   const { window } = dom;
 
-  // Fausse API Electron : les méthodes connues renvoient des données de
-  // test, toute autre méthode résout `undefined` ; les on*() mémorisent
-  // leur rappel pour que le test puisse simuler un événement.
   const rappels: Record<string, Rappel> = {};
   const reponses: Record<string, unknown> = {
     obtenirDictionnairesI18n: traductions,
@@ -158,7 +145,6 @@ async function chargerPage({
         return (...args: unknown[]) => {
           appels[nom] = (appels[nom] ?? 0) + 1;
           const reponse = reponses[nom];
-          // Réponse calculée à partir des arguments (ex. pagination).
           return Promise.resolve(
             typeof reponse === 'function'
               ? reponse(...args)
@@ -217,7 +203,6 @@ describe('page des salons (scripts découpés)', () => {
       )
     ).toEqual(['# général', '# autre']);
     expect(textes(document)).toEqual(['salut']);
-    // Rail : icône du serveur mémorisée pour la page suivante.
     expect(
       document.querySelector('.server-icon[data-serveur-id="srv"]')
     ).not.toBeNull();
@@ -241,8 +226,6 @@ describe('page des salons (scripts découpés)', () => {
     });
     expect(demandes).toHaveLength(avant);
 
-    // Salon d'un autre serveur : rechargé avec ce salon, pour que le
-    // runtime choisisse le serveur qui le contient.
     await rappels.onNavigateToConversation({
       type: 'salon',
       conversationId: 'salon-ailleurs',
@@ -286,8 +269,6 @@ describe('page des salons (scripts découpés)', () => {
         },
         obtenirEtatSalons: (options: unknown) => {
           demandes.push(options);
-          // Le message est dans « autre » (le salon ouvert) : aucun non-lu
-          // ailleurs, donc pas de badge dessiné (canvas absent de jsdom).
           const etat = etatInitial();
           etat.salons[0].messages = [];
           etat.salons[1].messages = [message('m9', 'bob', 'dans autre', 2)];
@@ -325,7 +306,6 @@ describe('page des salons (scripts découpés)', () => {
     await vi.waitFor(() =>
       expect(textes(document)).toEqual(['salut', 'nouveau'])
     );
-    // Même message reçu deux fois (écho) : pas de doublon.
     await rappels.onNouveauMessage({
       conversationType: 'salon',
       salonId: 'general',
@@ -346,7 +326,6 @@ describe('page des salons (scripts découpés)', () => {
     await vi.waitFor(() => expect(textes(document)).toEqual(['corrigé']));
     expect(document.querySelector('.edited-label')).not.toBeNull();
 
-    // Message inconnu (privé, autre serveur) : ignoré.
     rappels.onMessageModifieChange(message('inconnu', 'bob', 'x', 1));
     rappels.onMessageSupprimeChange({ messageId: 'inconnu' });
     expect(textes(document)).toEqual(['corrigé']);
@@ -412,7 +391,6 @@ describe('page des salons (scripts découpés)', () => {
     expect(plus.hidden).toBe(false);
 
     plus.click();
-    // Membre inconnu (non résolu) : repli sur « utilisateur inconnu ».
     await vi.waitFor(() => expect(noms()).toHaveLength(3));
     expect(plus.hidden).toBe(true);
     expect(demandes).toEqual([
@@ -458,7 +436,6 @@ describe('page des salons (scripts découpés)', () => {
         document.querySelectorAll('.member-row .member-action.danger')
       ).toHaveLength(2)
     );
-    // Premier « Expulser » : celui du propriétaire (en tête de liste).
     document
       .querySelector<HTMLButtonElement>('.member-row .member-action.danger')
       ?.click();
@@ -484,7 +461,6 @@ describe('page des salons (scripts découpés)', () => {
 
   it('rail : 10 serveurs, puis « voir plus » ; le serveur actif reste visible', async () => {
     const etat = etatInitial();
-    // Le serveur actif (« srv ») est le 15e : il est affiché quand même.
     etat.serveurs = [
       ...Array.from({ length: 14 }, (_, i) => ({
         id: `s${i}`,
@@ -516,12 +492,13 @@ describe('page des salons (scripts découpés)', () => {
     expect(plus()?.getAttribute('aria-label')).toBe(
       traductions.fr.servers.showMoreRail
     );
-    // « Voir plus » juste avant le bouton « + » du rail.
     expect(plus()?.nextElementSibling?.id).toBe('open-create-channel-rail');
     plus()!.click();
     expect(icones()).toHaveLength(20);
     expect(icones()[14].getAttribute('data-serveur-id')).toBe('srv');
-    expect(document.querySelectorAll('[data-serveur-id="srv"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-serveur-id="srv"]')).toHaveLength(
+      1
+    );
     plus()!.click();
     expect(icones()).toHaveLength(25);
     expect(plus()).toBeNull();
@@ -544,12 +521,24 @@ describe('page des salons (scripts découpés)', () => {
       autresReponses: { obtenirEtatSalons: etat },
     });
     await vi.waitFor(() =>
-      expect(document.querySelectorAll('#server-rail [data-serveur-id]')).toHaveLength(11)
+      expect(
+        document.querySelectorAll('#server-rail [data-serveur-id]')
+      ).toHaveLength(11)
     );
-    expect(document.querySelector('#server-rail [data-serveur-id="srv"]')?.classList.contains('active')).toBe(true);
-    document.querySelector<HTMLButtonElement>('#server-rail .server-icon--more')!.click();
-    expect(document.querySelectorAll('#server-rail [data-serveur-id]')).toHaveLength(15);
-    expect(document.querySelector('#server-rail .server-icon--more')).toBeNull();
+    expect(
+      document
+        .querySelector('#server-rail [data-serveur-id="srv"]')
+        ?.classList.contains('active')
+    ).toBe(true);
+    document
+      .querySelector<HTMLButtonElement>('#server-rail .server-icon--more')!
+      .click();
+    expect(
+      document.querySelectorAll('#server-rail [data-serveur-id]')
+    ).toHaveLength(15);
+    expect(
+      document.querySelector('#server-rail .server-icon--more')
+    ).toBeNull();
     expect(erreurs).toEqual([]);
   });
 
@@ -580,7 +569,6 @@ describe('page des salons (scripts découpés)', () => {
         .find((b) => b.textContent?.includes(salonId))
         ?.querySelector<HTMLElement>('.notif-count');
 
-    // Le salon affiché (général) est lu dès son affichage.
     await vi.waitFor(() =>
       expect(marques).toEqual([
         { type: 'salon', conversationId: 'general', messageId: 'm1' },
@@ -588,7 +576,6 @@ describe('page des salons (scripts découpés)', () => {
     );
     expect(compteur('général')?.hidden).toBe(true);
     expect(compteur('autre')?.textContent).toBe('99+');
-    // Compteur du serveur : somme de ses salons non lus (« autre » : 99+).
     const compteurServeur = document.querySelector<HTMLElement>(
       '.server-icon[data-serveur-id="srv"] .notif-count--rail'
     );
@@ -625,7 +612,6 @@ describe('page des salons (scripts découpés)', () => {
       serveurId: 'srv',
       message: message('m3', 'bob', 'ici', 3),
     });
-    // Son propre message ne compte jamais.
     rappels.onNouveauMessage({
       conversationType: 'salon',
       salonId: 'autre',
@@ -664,7 +650,7 @@ describe('page des salons (scripts découpés)', () => {
         obtenirNonLus: { salons: { autre: 2 }, prives: {} },
       },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).NotifPrefs.definirMode('moi', 'aucune');
     window.eval('afficherSalons()');
     expect(
@@ -713,7 +699,6 @@ describe('page des salons (scripts découpés)', () => {
     expect(dialogue.querySelector<HTMLElement>('.search-more')?.hidden).toBe(
       true
     );
-    // Annuler le délai encore en attente pour terminer ce scénario.
     champ.value = '';
     champ.dispatchEvent(new window.Event('input'));
   });
@@ -760,7 +745,6 @@ describe('page des salons (scripts découpés)', () => {
     );
     expect(statut.textContent).toBe(traductions.fr.search.prompt);
 
-    // Un seul caractère : rien n'est demandé au serveur.
     champ.value = 'p';
     champ.dispatchEvent(new window.Event('input'));
     champ.value = 'projet';
@@ -789,17 +773,14 @@ describe('page des salons (scripts découpés)', () => {
       true
     );
 
-    // Clic sur un résultat : le dialogue se ferme sur le salon.
     dialogue.querySelector<HTMLElement>('.search-result')?.click();
     expect(dialogue.open).toBe(false);
 
-    // Même salon : la recherche précédente est gardée.
     document.querySelector<HTMLElement>('#open-search')?.click();
     expect(champ.value).toBe('projet');
     expect(dialogue.querySelectorAll('.search-result')).toHaveLength(2);
     dialogue.querySelector<HTMLElement>('.search-close')?.click();
 
-    // Autre salon : on repart de zéro, dans ce salon.
     [...document.querySelectorAll<HTMLElement>('#channel-list button')]
       .find((b) => b.textContent?.includes('autre'))
       ?.click();
@@ -816,7 +797,6 @@ describe('page des salons (scripts découpés)', () => {
     const { document, window } = await chargerPage({
       autresReponses: {
         rechercherMessages: () => {
-          // Forme d'une erreur relayée par l'IPC d'Electron.
           if (echec)
             throw "Error invoking remote method 'messages:rechercher': Error: ERR_HTTP_503";
           return { resultats: [], curseurSuivant: null };
@@ -866,7 +846,6 @@ describe('page des salons (scripts découpés)', () => {
               { utilisateurId: 'alice', nom: 'alice', luJusqua: 1 },
               { utilisateurId: 'carla', nom: 'carla', luJusqua: 1 },
               { utilisateurId: 'dave', nom: 'dave', luJusqua: 0 },
-              // L'auteur du message n'est jamais listé.
               { utilisateurId: 'bob', nom: 'bob', luJusqua: 1 },
             ],
           },
@@ -906,7 +885,6 @@ describe('page des salons (scripts découpés)', () => {
         expect(vuPar()).toBe('Vu par zoe, eve, dave et 2 autres')
       );
 
-      // Autre salon, ou lecture d'un message plus ancien : sans effet.
       rappels.onLectureChange({
         type: 'salon',
         conversationId: 'autre',
@@ -1034,11 +1012,8 @@ describe('page des salons (scripts découpés)', () => {
           autourId: 'ancien',
           taille: 50,
         }),
-        // Y a-t-il des messages plus récents ? (un seul suffit)
         expect.objectContaining({ apresId: 'ancien', taille: 50 }),
       ]);
-      // Rien après la cible : la fenêtre rejoint les messages récents déjà
-      // affichés, sans bouton « plus récents ».
       expect(textes(document)).toEqual(['un vieux message', 'salut']);
     });
 
@@ -1172,7 +1147,6 @@ it('recherche Salon : roue pendant un seul chargement puis pagination depuis la 
       .querySelector('[data-message-id="ancien"]')
       ?.classList.contains('message-cible')
   ).toBe(true);
-  // Une page de messages plus récents arrive avec la cible.
   expect(document.querySelector('[data-message-id="m1"]')).not.toBeNull();
   expect(demandes[1]).toMatchObject({ apresId: 'ancien', taille: 50 });
   const bouton = [...document.querySelectorAll('button')].find(
@@ -1220,7 +1194,6 @@ it.each([
     const bouton = [...document.querySelectorAll('button')].find(
       (element) => element.textContent === traductions.fr.history.loadNewer
     );
-    // Échec : le bouton reste, la suite existe peut-être.
     expect(Boolean(bouton)).toBe(cas === 'vérification en échec');
   }
 );
@@ -1231,7 +1204,6 @@ describe('fiche de profil (page des salons)', () => {
     for (const page of pagesOuvertes.splice(0)) page.window.close();
   });
 
-  // jsdom ne fournit pas l'API native <dialog> : même contrat que Chromium.
   const brancherDialogues = (window: JSDOM['window']) => {
     window.HTMLDialogElement.prototype.showModal = function () {
       this.setAttribute('open', '');
@@ -1305,7 +1277,6 @@ describe('fiche de profil (page des salons)', () => {
       { utilisateurId: 'moi', autreUtilisateurId: 'bob' },
     ]);
     expect(cibles).toEqual([{ type: 'prive', id: 'bob:moi' }]);
-    // Fermée, la fiche est retirée du document.
     expect(document.querySelector('.profile-card-dialog')).toBeNull();
     expect(erreurs).toEqual([]);
   });
@@ -1334,7 +1305,6 @@ describe('fiche de profil (page des salons)', () => {
     expect(fiche()?.querySelector('.profile-card-presence')?.textContent).toBe(
       'Hors ligne'
     );
-    // Clic dans le contenu : la fiche reste ouverte ; sur le fond : fermée.
     fiche()!.querySelector<HTMLElement>('.profile-card')!.click();
     expect(fiche()?.open).toBe(true);
     fiche()!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));

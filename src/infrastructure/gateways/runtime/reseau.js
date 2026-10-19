@@ -1,8 +1,5 @@
 'use strict';
 
-// runtime/reseau.js — Réseau : reconnexion automatique, réveil, battement de cœur ; état de saisie.
-// Méthodes de RealGatewayRuntime, ajoutées à son prototype (voir
-// RealGatewayRuntime.js) : `this` est l'instance.
 const {
   CAUSE_HORS_LIGNE,
   CAUSE_SERVEUR_INJOIGNABLE,
@@ -13,27 +10,15 @@ const {
 } = require('./constantes');
 
 module.exports = {
-  // --- Réseau : reconnexion automatique ------------------------------------------
-  // Trois sources de vérité, combinées ici :
-  //  - le socket Socket.IO lui-même ('connect' / 'disconnect' / 'connect_error') ;
-  //  - l'état réseau du système d'exploitation, relayé par main.js
-  //    (net.isOnline / powerMonitor, voir signalerReseauSysteme/signalerReveil) :
-  //    inutile de marteler le serveur quand la machine n'a pas de réseau ;
-  //  - un battement de cœur HTTP (GET /api/health) tant qu'on est connecté,
-  //    pour détecter un socket "zombie" bien avant le ping/pong Socket.IO.
-
   sessionActive() {
     return Boolean(this.jeton && this.utilisateurConnecte);
   },
 
-  /** Ferme le socket courant SANS déclencher de reconnexion (voir le garde
-   * `this.socket !== socket` dans les écouteurs de connecterSocket). */
   fermerSocket() {
     const socket = this.socket;
     this.socket = null;
     this.socketPret = false;
     clearTimeout(this.minuteurRepliConnexionPrete);
-    // Plus de flux temps réel : l'instantané de présence n'est plus fiable.
     this.enLigneTempsReel = null;
     clearTimeout(this.minuteurSuiviPresence);
     this.minuteurSuiviPresence = null;
@@ -46,11 +31,6 @@ module.exports = {
     this.minuteurReconnexion = null;
   },
 
-  /**
-   * Planifie la prochaine tentative de connexion avec un délai exponentiel
-   * (1 s, 2 s, 4 s… plafonné à DELAI_RECONNEXION_MAX_MS). Idempotente : un
-   * `disconnect` suivi d'un `connect_error` ne planifie qu'une seule tentative.
-   */
   planifierReconnexion() {
     if (!this.sessionActive() || this.fermetureVoulue) return;
     this.arreterBattementCoeur();
@@ -84,8 +64,6 @@ module.exports = {
     }, delai);
   },
 
-  /** Bouton "Réessayer maintenant" : saute le délai en cours et repart d'un
-   * backoff minimal. Sans effet (hors état) si la machine est hors ligne. */
   reconnecterMaintenant() {
     if (!this.sessionActive()) return this.obtenirEtatConnexion();
     this.annulerReconnexionPlanifiee();
@@ -103,7 +81,6 @@ module.exports = {
     return this.obtenirEtatConnexion();
   },
 
-  /** Relayé par main.js à chaque changement de connectivité de l'OS. */
   signalerReseauSysteme(enLigne) {
     const etaitHorsLigne = this.horsLigneSysteme;
     this.horsLigneSysteme = !enLigne;
@@ -120,8 +97,6 @@ module.exports = {
     if (etaitHorsLigne) this.reconnecterMaintenant();
   },
 
-  /** Sortie de veille : le socket d'avant la mise en veille est presque
-   * toujours mort sans le savoir, on en ouvre un neuf immédiatement. */
   signalerReveil() {
     if (this.sessionActive() && !this.fermetureVoulue) {
       this.reconnecterMaintenant();
@@ -140,8 +115,6 @@ module.exports = {
         );
         if (!reponse.ok) throw new Error(`ERR_HTTP_${reponse.status}`);
       } catch {
-        // Le socket a pu être remplacé pendant l'appel : n'agir que s'il
-        // s'agit toujours du même.
         if (this.socket !== socket || this.etatConnexion.statut !== 'connecte')
           return;
         this.fermerSocket();
@@ -162,8 +135,6 @@ module.exports = {
       clearTimeout(minuteur)
     );
   },
-
-  // --- État de saisie (Socket.IO, éphémère) --------------------------------------
 
   async modifierEtatSaisie({ conversationId, est_saisie }) {
     this.verifierReseauConnecte();

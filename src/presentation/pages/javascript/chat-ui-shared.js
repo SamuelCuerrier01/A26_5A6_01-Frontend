@@ -1,9 +1,6 @@
 (function () {
   'use strict';
 
-  // Compte à rebours "nouvelle tentative dans X s" : rafraîchi chaque
-  // seconde tant qu'une tentative est planifiée (voir planifierReconnexion
-  // dans RealGatewayRuntime.js, qui fournit `prochaineTentative`).
   let minuteurCompteARebours = null;
 
   function texteDetailReseau(etat, t) {
@@ -58,9 +55,6 @@
       ? setInterval(majDetail, 1000)
       : null;
 
-    // "Réessayer" n'a de sens que si une tentative est en attente : ni
-    // connecté, ni machine hors ligne (rien à tenter tant que l'OS n'a pas
-    // de réseau — la reconnexion repart d'elle-même à son retour).
     if (reessayer) {
       reessayer.hidden = !(
         (etat.statut === 'deconnecte' || etat.statut === 'reconnexion') &&
@@ -68,15 +62,6 @@
       );
     }
 
-    // Le champ de message et son bouton d'envoi ne dépendent QUE de la
-    // présence d'une conversation active (composerAutorise) : un message tapé
-    // hors ligne reste envoyable depuis l'UI, il est simplement affiché
-    // immédiatement comme "non livré" avec des actions supprimer/réessayer
-    // tant que la connexion n'est pas revenue (voir creerMessageEnAttente et
-    // creerActionsMessageNonLivre plus bas, et leur usage dans renderer.js /
-    // message-prive.js). Ce composerBloque ne doit donc plus dépendre de
-    // l'état réseau, contrairement aux autres contrôles ci-dessous qui
-    // déclenchent, eux, un vrai aller-retour serveur.
     const composerBloque = !composerAutorise;
     if (messageInput) messageInput.disabled = composerBloque;
     if (submitButton) submitButton.disabled = composerBloque;
@@ -91,27 +76,6 @@
 
   const DELAI_RECHERCHE_UTILISATEURS_MS = 250;
 
-  /**
-   * Sélecteur d'utilisateur réutilisable (nouveau message privé, invitation
-   * dans un salon) : un champ de recherche, puis une liste qui affiche des
-   * suggestions tant que le champ est vide, et les résultats de la recherche
-   * par début de pseudo (GET /api/users/search) sinon.
-   *
-   * @param {object} options
-   * @param {Function} options.t traduction
-   * @param {Function} options.messageErreur traduction d'une erreur
-   * @param {() => Promise<object[]>} options.obtenirSuggestions
-   * @param {(texte: string) => Promise<object[]>} options.rechercher
-   * @param {(user: object) => {libelle: string, desactive?: boolean}} options.decrireAction
-   *   texte à droite de chaque ligne ; `desactive` grise la ligne (ex. déjà
-   *   membre du salon)
-   * @param {(user: object) => void} options.surChoix
-   * @param {(user: object) => boolean} [options.garderSuggestion] filtre des
-   *   suggestions (les résultats de recherche, eux, sont tous affichés)
-   * @param {string} options.messageAucuneSuggestion
-   * @returns {HTMLElement[]} éléments à insérer dans le dialogue ; le champ
-   *   reçoit le focus au prochain tour de boucle
-   */
   function creerSelecteurUtilisateurs({
     t,
     messageErreur,
@@ -123,8 +87,6 @@
     messageAucuneSuggestion,
   }) {
     let minuteur = null;
-    // Numéro de la dernière requête lancée : une réponse arrivée après une
-    // requête plus récente est ignorée (frappe rapide).
     let numero = 0;
 
     const champ = document.createElement('input');
@@ -196,9 +158,7 @@
       let utilisateurs = [];
       try {
         utilisateurs = (await obtenirSuggestions()).filter(garderSuggestion);
-      } catch {
-        // Liste vide : la recherche reste disponible.
-      }
+      } catch {}
       if (n !== numero) return;
       afficher({
         titre: t('dm.suggestionsTitle'),
@@ -220,7 +180,6 @@
         });
       } catch (erreur) {
         if (n !== numero) return;
-        // 404 : Authentification pas encore à jour (route /search absente).
         afficher({
           messageVide: String(erreur?.message ?? '').includes('ERR_HTTP_404')
             ? t('dm.searchUnavailable')
@@ -237,8 +196,6 @@
         DELAI_RECHERCHE_UTILISATEURS_MS
       );
     });
-    // Les dialogues sont des <form method="dialog"> : sans ça, Entrée les
-    // fermerait. Entrée choisit plutôt le premier résultat disponible.
     champ.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -250,20 +207,10 @@
     return [champ, titreEl, listeEl];
   }
 
-  /**
-   * Nom affiché d'un utilisateur : son alias (nom d'affichage choisi dans
-   * son profil, User-Config-Service) s'il en a un, sinon son pseudo.
-   */
   function nomAffiche(utilisateur) {
     return utilisateur?.alias || utilisateur?.pseudo || '';
   }
 
-  /**
-   * Photo de profil dans un rond d'avatar existant (liste, messages,
-   * membres…). Sans photo, l'élément garde son contenu (initiale ou dégradé).
-   * Insère l'<img> en premier enfant pour ne pas écraser les autres
-   * (pastille "non lu" des conversations privées, par exemple).
-   */
   function remplirAvatar(element, avatar) {
     if (!element) return;
     let image = element.querySelector(':scope > img.avatar-img');
@@ -283,13 +230,6 @@
     element.classList.add('has-photo');
   }
 
-  /**
-   * Avatar de l'utilisateur connecté (panneau du bas) : photo de profil si
-   * définie (préférence `avatar`, User-Config-Service), sinon l'initiale de
-   * l'alias/pseudo, et une pastille verte (en ligne) ou rouge (hors ligne).
-   * « En ligne » exige la présence 'en-ligne' ET une connexion réseau
-   * établie : coupé du serveur, on n'est de fait plus joignable.
-   */
   function afficherAvatarCourant({
     element,
     utilisateur,
@@ -336,8 +276,6 @@
     return { reseau, presences };
   }
 
-  /** Bouton "Réessayer" de l'indicateur réseau (la présence se modifie
-   * désormais depuis la page profil). */
   function brancherBoutonReessayer({
     api,
     element,
@@ -354,25 +292,16 @@
     });
   }
 
-  // --- Rôles dans un serveur ---------------------------------------------
-  // Mêmes règles que src/domain/entities/Serveur.ts (et, côté serveur, que
-  // Room-Service, qui fait foi) : dupliquées ici parce que ce fichier est un
-  // script classique, sans import possible (même raison que creerDmId dans
-  // RealGatewayRuntime.js). Ne servent qu'à masquer les actions
-  // indisponibles. `role` = `monRole` d'un serveur ('admin', 'proprietaire',
-  // 'moderateur', 'membre' ou null).
   const RANG_ROLE = { membre: 1, moderateur: 2, proprietaire: 3, admin: 4 };
 
   function rangRole(role) {
     return RANG_ROLE[role] ?? 0;
   }
 
-  /** Créer / modifier / supprimer des salons, expulser, voir les invitations. */
   function peutModererServeur(role) {
     return rangRole(role) >= RANG_ROLE.moderateur;
   }
 
-  /** Renommer, rendre public/privé, supprimer le serveur, nommer des modérateurs. */
   function peutGererServeur(role) {
     return rangRole(role) >= RANG_ROLE.proprietaire;
   }
@@ -387,39 +316,12 @@
       .join('');
   }
 
-  /**
-   * Icônes des serveurs dans le rail de gauche (page des salons ET page des
-   * messages privés) : une par serveur, insérées juste avant `avant` (le
-   * bouton « + »). Remplace les icônes précédemment rendues.
-   *
-   * @param {object} options
-   * @param {HTMLElement} options.conteneur #server-rail
-   * @param {HTMLElement|null} options.avant élément avant lequel insérer
-   * @param {object[]} options.serveurs résumés { id, nom, icone }
-   * @param {string|null} options.serveurActifId
-   * @param {Map<string, number>} options.nonLus non-lus par serveur (compteur)
-   * @param {(serveur: object) => void} options.surChoix
-   * @param {string} [options.libelleVoirPlus] bouton « voir plus » du rail
-   */
-  // Dernière liste de serveurs affichée dans le rail, pour la redessiner
-  // AUSSITÔT au chargement de la page suivante (voir afficherRailDepuisCache)
-  // au lieu d'attendre le réseau : sinon les icônes apparaissaient d'un coup
-  // et le bouton « + » descendait à chaque changement de page. localStorage
-  // (et non sessionStorage) : il survit de façon fiable à la navigation
-  // file:// entre pages. Vidé à la déconnexion (oublierRailEnCache), et lié
-  // au compte qui l'a écrit : après une session expirée (sans déconnexion
-  // volontaire), le compte suivant ne voit jamais les serveurs du précédent.
   const CLEF_RAIL_EN_CACHE = 'chatvardage:rail-serveurs';
-  // Vrai dès que le rail a été dessiné depuis le réseau : le cache, lu de
-  // façon asynchrone, ne doit plus l'écraser.
   let railReelAffiche = false;
-  // Pagination du rail : TAILLE_PAGE_RAIL icônes, puis « voir plus » en
-  // ajoute autant (le rail défile). Le serveur actif reste toujours visible.
   const TAILLE_PAGE_RAIL = 10;
   let limiteRail = TAILLE_PAGE_RAIL;
   let dernieresOptionsRail = null;
 
-  /** Utilisateur connecté (état du processus main), ou null. */
   async function idUtilisateurConnecte() {
     try {
       const moi = await window.electronAPI?.obtenirUtilisateurConnecte?.();
@@ -444,9 +346,7 @@
           })),
         })
       );
-    } catch {
-      // Stockage plein ou indisponible : le rail attendra simplement le réseau.
-    }
+    } catch {}
   }
 
   async function afficherRailDepuisCache(options) {
@@ -456,8 +356,6 @@
     } catch {
       cache = null;
     }
-    // Ancien format (tableau seul, sans compte) : ignoré, remplacé au
-    // prochain affichage depuis le réseau.
     if (!cache || !Array.isArray(cache.serveurs)) return;
     const utilisateurId = await idUtilisateurConnecte();
     if (railReelAffiche) return;
@@ -475,9 +373,7 @@
   function oublierRailEnCache() {
     try {
       localStorage.removeItem(CLEF_RAIL_EN_CACHE);
-    } catch {
-      // Rien à oublier.
-    }
+    } catch {}
   }
 
   function afficherRailServeurs({
@@ -511,7 +407,6 @@
     const indexActif = liste.findIndex((s) => s.id === serveurActifId);
     const limite = limiteRail;
     const visibles = liste.slice(0, limite);
-    // Le serveur actif hors page reste visible sans dévoiler les pages suivantes.
     if (indexActif >= limite) visibles.push(liste[indexActif]);
     for (const serveur of visibles) {
       const bouton = document.createElement('button');
@@ -532,7 +427,6 @@
           document.createTextNode(initialesServeur(serveur.nom))
         );
       }
-      // Nombre de messages non lus du serveur (somme de ses salons).
       const nombre = nonLus?.get(serveur.id) ?? 0;
       const compteur = document.createElement('span');
       compteur.className = 'notif-count notif-count--rail';
@@ -553,7 +447,6 @@
       plus.addEventListener('click', () => {
         limiteRail = limite + TAILLE_PAGE_RAIL;
         afficherRailServeurs({ ...dernieresOptionsRail, memoriser: false });
-        // Les nouvelles icônes sont sous le bouton : on les fait apparaître.
         conteneur
           .querySelectorAll('.server-icon[data-serveur-id]')
           [limite]?.scrollIntoView?.({ block: 'nearest' });
@@ -590,8 +483,6 @@
     messageErreur,
     champMessage,
     getEtatReseau,
-    // Faux pour le message d'un autre qu'un modérateur peut seulement
-    // supprimer (Message-Service réserve la modification à l'auteur).
     peutModifier = true,
   }) {
     const actions = document.createElement('div');
@@ -792,34 +683,11 @@
 
   let compteurMessageLocal = 0;
 
-  /**
-   * Génère un identifiant local pour un message pas encore livré au serveur
-   * (préfixé "local-" pour ne jamais entrer en collision avec les
-   * identifiants attribués par Message-Service une fois l'envoi
-   * réellement accepté).
-   */
   function genererIdMessageLocal() {
     compteurMessageLocal += 1;
     return `local-${Date.now()}-${compteurMessageLocal}`;
   }
 
-  /**
-   * Crée l'objet représentant un message tapé alors que la connexion au
-   * serveur est coupée (ou dont l'envoi a échoué en cours de route) : affiché
-   * immédiatement dans la liste comme les autres messages, mais marqué
-   * `nonLivre: true` pour que l'appelant lui substitue les actions
-   * supprimer/réessayer (voir creerActionsMessageNonLivre) plutôt que les
-   * actions modifier/supprimer normales. `envoi` et `date` portent la même
-   * valeur : la conversation privée (message-prive.js) trie par `envoi`, le
-   * salon (renderer.js) par `date` — dupliquer le champ ici évite à chaque
-   * page de connaître le détail de champ de tri de l'autre.
-   *
-   * @param conversationId Identifiant du salon ou de la conversation privée visé.
-   * @param auteurId Identifiant de l'utilisateur courant (auteur du message).
-   * @param contenu Contenu texte du message.
-   *
-   * @returns Un objet "Message"-compatible, avec `nonLivre: true`.
-   */
   function creerMessageEnAttente({ conversationId, auteurId, contenu }) {
     const maintenant = Date.now();
     return {
@@ -834,29 +702,6 @@
     };
   }
 
-  /**
-   * Construit la ligne d'actions d'un message "non livré" (jamais parti vers
-   * le serveur, faute de connexion) : un badge indiquant l'échec, plus les
-   * boutons réessayer/supprimer. Contrairement à creerActionsMessage, ces
-   * actions ne sont JAMAIS désactivées par l'état de connexion — un message
-   * en attente doit toujours pouvoir être supprimé, et "réessayer" est
-   * justement ce qui re-teste la connexion (c'est à la charge de l'appelant,
-   * via `onReessayer`, de vérifier l'état de connexion avant de retenter
-   * l'envoi et de laisser le message en attente sinon).
-   *
-   * @param message Le message en attente (voir creerMessageEnAttente).
-   * @param t Fonction de traduction (voir I18n.t).
-   * @param enCours Vrai si une tentative d'envoi est déjà en cours pour CE
-   *   message (voir reessayerMessageEnAttenteSalon/Dm côté appelant) :
-   *   désactive les deux boutons pour la durée de la requête, pour qu'un
-   *   double clic sur "Réessayer" ne puisse pas déclencher un second envoi,
-   *   et qu'un clic sur "Supprimer" ne puisse pas faire croire à une
-   *   annulation d'un envoi déjà parti vers le serveur.
-   * @param onReessayer Appelée avec le message quand l'utilisateur clique sur "Réessayer".
-   * @param onSupprimer Appelée avec le message quand l'utilisateur clique sur "Supprimer".
-   *
-   * @returns Un élément DOM à ajouter au corps du message (`.message-body`).
-   */
   function creerActionsMessageNonLivre({
     message,
     t,
@@ -872,10 +717,6 @@
     badge.textContent = t('messages.notDelivered');
 
     const actions = document.createElement('div');
-    // Pas de classe 'message-non-livre-actions' ici : aucune règle CSS ne la
-    // cible (voir styles.css, qui scope volontairement l'opacité via
-    // .message-row.non-livre .message-actions pour des raisons de
-    // spécificité) — l'ajouter n'avait donc aucun effet, elle était morte.
     actions.classList.add('message-actions');
 
     const reessayer = document.createElement('button');
@@ -899,11 +740,6 @@
     return conteneur;
   }
 
-  // --- Recherche de messages (dialogue partagé par les deux pages) ---------
-  // Le dialogue #search-dialog est écrit dans index.html et
-  // message-prive.html. La recherche porte sur la conversation affichée (le
-  // salon, ou la conversation privée), fournie par la page
-  // (`conversationActive`) ; `surChoix` ouvre la conversation d'un résultat.
   const DELAI_RECHERCHE_MS = 300;
 
   function creerResultatRecherche({ resultat, terme, t, surChoix }) {
@@ -949,14 +785,6 @@
     return item;
   }
 
-  /**
-   * Branche le bouton `bouton` et le dialogue de recherche `dialogue`.
-   * `conversationActive()` : `{ type, conversationId, nom }` de la
-   * conversation affichée, ou null. Recherche lancée après une courte pause
-   * de frappe (ou Entrée), à partir de 2 caractères ; « Plus de résultats »
-   * suit le curseur du serveur. Une réponse arrivée après une saisie plus
-   * récente (ou pour une autre conversation) est ignorée.
-   */
   function brancherRechercheMessages({
     bouton,
     dialogue,
@@ -985,7 +813,7 @@
 
     function vider() {
       window.clearTimeout(minuteur);
-      numeroRequete += 1; // une réponse en cours est désormais périmée
+      numeroRequete += 1;
       liste.replaceChildren();
       plus.hidden = true;
     }
@@ -1044,7 +872,6 @@
 
     bouton.addEventListener('click', () => {
       const active = conversationActive();
-      // Autre conversation qu'à la dernière ouverture : on repart de zéro.
       if (
         active?.type !== portee?.type ||
         active?.conversationId !== portee?.conversationId
@@ -1078,9 +905,6 @@
       ?.addEventListener('click', () => dialogue.close());
   }
 
-  // --- Non-lus et accusés de lecture (affichage commun aux deux pages) -----
-
-  /** Ligne « Nouveaux messages », au-dessus du premier non-lu. */
   function creerSeparateurNonLus(t) {
     const separateur = document.createElement('div');
     separateur.classList.add('unread-separator');
@@ -1091,7 +915,6 @@
     return separateur;
   }
 
-  /** ✓ (distribué) ou ✓✓ (lu) d'un de mes messages privés. */
   function creerStatutLecture(statut, t) {
     const marque = document.createElement('span');
     marque.classList.add('read-status', `read-status--${statut}`);
@@ -1109,7 +932,6 @@
     return marque;
   }
 
-  /** Texte sous un message : « Lu », « Vu par … ». */
   function creerLigneLecture(texte) {
     const ligne = document.createElement('p');
     ligne.classList.add('read-receipt');
@@ -1117,21 +939,13 @@
     return ligne;
   }
 
-  // --- Aller à un message (résultat de recherche) ---------------------------
-  // Message mis en évidence quelques secondes ; gardé ici pour que les
-  // rendus suivants (accusés de lecture, message reçu) le conservent.
   const DUREE_MISE_EN_EVIDENCE_MS = 2500;
   let messageCible = { id: null, jusqua: 0 };
 
-  /** Vrai si la ligne du message `messageId` doit être mise en évidence. */
   function estMessageCible(messageId) {
     return messageCible.id === messageId && Date.now() < messageCible.jusqua;
   }
 
-  /**
-   * Fait défiler `conteneur` jusqu'au message `messageId` (lignes marquées
-   * `data-message-id`) et le met en évidence. Faux s'il n'est pas affiché.
-   */
   function allerAuMessageAffiche(conteneur, messageId) {
     const ligne = [...conteneur.querySelectorAll('[data-message-id]')].find(
       (element) => element.dataset.messageId === messageId
@@ -1151,7 +965,6 @@
     return true;
   }
 
-  /** « Vu par alice, bob et 3 autres » (null si personne). */
   function texteVuPar(noms, t) {
     if (!noms.length) return null;
     const resume = window.LogiqueInterface.resumeNoms(noms);
@@ -1177,15 +990,6 @@
     conteneur.replaceChildren(statut);
   }
 
-  /**
-   * Fiche de profil d'un autre utilisateur ({ id, pseudo, alias, avatar }) :
-   * photo (ou initiale), nom affiché, @pseudo, présence, alias et pseudo, et
-   * un bouton « Message privé » (`surMessagePrive(utilisateur)`), absent pour
-   * soi-même et pour la conversation privée déjà affichée avec cette
-   * personne (`conversationAvecId`). Dialogue créé à la demande et retiré à
-   * la fermeture : utilisable par-dessus un autre dialogue (liste des
-   * membres d'un serveur).
-   */
   function ouvrirFicheProfil({
     utilisateur,
     enLigne,
@@ -1273,7 +1077,6 @@
     corps.className = 'profile-card-body';
     corps.append(entete, contenu);
     dialogue.append(corps);
-    // Clic sur le fond (hors du contenu) : ferme, comme Échap.
     dialogue.addEventListener('click', (event) => {
       if (event.target === dialogue) dialogue.close();
     });
@@ -1283,11 +1086,6 @@
     return dialogue;
   }
 
-  /**
-   * Rend un avatar cliquable : ouvre la fiche de profil de `utilisateurId`
-   * (souris ou clavier, Entrée/Espace). `ouvrir` reçoit l'identifiant au
-   * moment du clic, pour lire les données à jour (alias, photo, présence).
-   */
   function rendreAvatarCliquable(element, { utilisateurId, nom, t, ouvrir }) {
     if (!element || !utilisateurId) return;
     element.classList.add('avatar-clickable');
@@ -1308,7 +1106,53 @@
     });
   }
 
+  function creerIconeMain() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'icone-main');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const groupe = document.createElementNS(NS, 'g');
+    groupe.setAttribute('fill', 'currentColor');
+    const paume = document.createElementNS(NS, 'circle');
+    paume.setAttribute('cx', '8');
+    paume.setAttribute('cy', '10');
+    paume.setAttribute('r', '4');
+    groupe.appendChild(paume);
+    for (const angle of [-30, -10, 10, 30]) {
+      const doigt = document.createElementNS(NS, 'rect');
+      doigt.setAttribute('x', '-1');
+      doigt.setAttribute('y', '-6');
+      doigt.setAttribute('width', '2');
+      doigt.setAttribute('height', '5');
+      doigt.setAttribute('rx', '1');
+      doigt.setAttribute('transform', `translate(8 6) rotate(${angle})`);
+      groupe.appendChild(doigt);
+    }
+    svg.appendChild(groupe);
+    return svg;
+  }
+
+  const EMOJI_VERS_ICONE = { '👋': creerIconeMain };
+
+  function remplirTexteMessage(element, texte) {
+    element.replaceChildren();
+    const emojiConnus = Object.keys(EMOJI_VERS_ICONE);
+    const decoupage = new RegExp(`(${emojiConnus.join('|')})`, 'gu');
+    for (const segment of texte.split(decoupage)) {
+      if (!segment) continue;
+      const creerIcone = EMOJI_VERS_ICONE[segment];
+      element.appendChild(
+        creerIcone ? creerIcone() : document.createTextNode(segment)
+      );
+    }
+  }
+
   window.ChatUiShared = Object.freeze({
+    remplirTexteMessage,
     afficherChargementRecherche,
     estMessageCible,
     allerAuMessageAffiche,

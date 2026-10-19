@@ -25,7 +25,9 @@ type InactiviteApi = {
 
 type ElectronApi = {
   obtenirUtilisateurConnecte: () => Promise<{ id: string }>;
-  definirMotifRetourConnexion: (motif: string) => Promise<string | undefined> | string | undefined;
+  definirMotifRetourConnexion: (
+    motif: string
+  ) => Promise<string | undefined> | string | undefined;
   deconnexionSession: () => Promise<void> | void;
   allerALaConnexion: () => Promise<void> | void;
 };

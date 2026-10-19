@@ -17,9 +17,6 @@
   ];
 
   function obtenirLocaleParDefaut() {
-    // L’application est livrée en français par défaut ; les traductions
-    // réelles doivent passer par `I18n.t(...)` lorsque le contexte de langue
-    // est explicitement configuré par le runtime.
     return 'fr';
   }
 
@@ -41,19 +38,15 @@
   function obtenirTitreNotificationDeconnexion() {
     if (racine.I18n && typeof racine.I18n.t === 'function') {
       const titre = racine.I18n.t('auth.logout');
-      return titre && titre !== 'auth.logout' ? titre : obtenirTextesFallback().deconnexion;
+      return titre && titre !== 'auth.logout'
+        ? titre
+        : obtenirTextesFallback().deconnexion;
     }
     return obtenirTextesFallback().deconnexion;
   }
 
   function notifierDeconnexion(message) {
     try {
-      // Dans Electron, la permission de notification est généralement déjà
-      // accordée par le runtime / le système d'exploitation, donc on n'ouvre
-      // pas de demande explicite ici. Le code est volontairement conservateur :
-      // si l'environnement ne la donne pas déjà comme "granted", on ignore la
-      // notification système sans produire de dialogue additionnel, ce qui évite
-      // un comportement silencieux ambigu dans un contexte web non autorisé.
       if (
         typeof racine.Notification === 'function' &&
         racine.Notification.permission === 'granted'
@@ -65,10 +58,16 @@
         return;
       }
     } catch (erreur) {
-      console.warn('[inactivite] notification de déconnexion impossible :', erreur);
+      console.warn(
+        '[inactivite] notification de déconnexion impossible :',
+        erreur
+      );
     }
 
-    console.warn('[inactivite] notification de déconnexion non disponible :', message);
+    console.warn(
+      '[inactivite] notification de déconnexion non disponible :',
+      message
+    );
   }
 
   function obtenirMessageDeconnexionInactivite() {
@@ -81,22 +80,6 @@
     return obtenirTextesFallback().sessionInactive;
   }
 
-  /**
-   * Crée un minuteur d'inactivité.
-   *
-   * @param {Object} options
-   * @param {number} [options.delaiMs=30*60*1000]
-   * @param {() => boolean} [options.estActif]
-   * @param {(() => string) | string} [options.message]
-   * @param {(message: string) => void} [options.notifier]
-   * @param {(() => Promise<void> | void)} [options.onExpire]
-   * @param {(callback: (...args: any[]) => void, delay?: number, ...args: any[]) => number} [options.setTimeoutFn]
-   * @param {(id: number) => void} [options.clearTimeoutFn]
-   *
-   * Les rejets de `onExpire` doivent être gérés en interne par la fonction
-   * fournie ; ce minuteur les capture côté appel pour éviter une
-   * `UnhandledPromiseRejection` non explicite.
-   */
   function creerMinuteurInactivite({
     delaiMs = DELAI_INACTIVITE_MS,
     estActif = () => true,
@@ -122,11 +105,17 @@
           const resultat = onExpire();
           if (resultat && typeof resultat.then === 'function') {
             resultat.catch((erreur) => {
-              console.error('[inactivite] échec du callback d’expiration :', erreur);
+              console.error(
+                '[inactivite] échec du callback d’expiration :',
+                erreur
+              );
             });
           }
         } catch (erreur) {
-          console.error('[inactivite] exception synchronisée dans le callback d’expiration :', erreur);
+          console.error(
+            '[inactivite] exception synchronisée dans le callback d’expiration :',
+            erreur
+          );
         }
       }, delaiMs);
     }
@@ -175,11 +164,15 @@
     objetInactivite.stopper();
 
     try {
-      if (!racine.electronAPI || typeof racine.electronAPI.deconnexionSession !== 'function') {
+      if (
+        !racine.electronAPI ||
+        typeof racine.electronAPI.deconnexionSession !== 'function'
+      ) {
         return null;
       }
 
-      const utilisateur = await racine.electronAPI.obtenirUtilisateurConnecte?.();
+      const utilisateur =
+        await racine.electronAPI.obtenirUtilisateurConnecte?.();
       if (!utilisateur) {
         return null;
       }
@@ -193,12 +186,16 @@
             return;
           }
 
-          const { definirMotifRetourConnexion, allerALaConnexion, deconnexionSession } =
-            racine.electronAPI;
+          const {
+            definirMotifRetourConnexion,
+            allerALaConnexion,
+            deconnexionSession,
+          } = racine.electronAPI;
 
           if (typeof definirMotifRetourConnexion === 'function') {
             try {
-              const motifRetour = await definirMotifRetourConnexion('session-inactive');
+              const motifRetour =
+                await definirMotifRetourConnexion('session-inactive');
               if (motifRetour !== 'session-inactive') {
                 console.warn(
                   '[inactivite] motif de retour non confirmé par le main process :',
@@ -206,7 +203,10 @@
                 );
               }
             } catch (erreur) {
-              console.error('[inactivite] échec de définition du motif :', erreur);
+              console.error(
+                '[inactivite] échec de définition du motif :',
+                erreur
+              );
             }
           } else {
             console.error(
@@ -225,21 +225,23 @@
           }
 
           if (typeof allerALaConnexion !== 'function') {
-            console.error('[inactivite] méthode absente pour revenir à la connexion.');
+            console.error(
+              '[inactivite] méthode absente pour revenir à la connexion.'
+            );
             return;
           }
 
           try {
             await allerALaConnexion();
           } catch (erreur) {
-            console.error('[inactivite] échec de retour à la connexion :', erreur);
+            console.error(
+              '[inactivite] échec de retour à la connexion :',
+              erreur
+            );
           }
         },
       });
 
-      // On démarre à une valeur qui représente « jamais » pour garantir qu'un
-      // premier événement fréquent est bien accepté, même si Date.now() vaut 0
-      // dans un environnement de test avec fake timers.
       let derniereReinitialisationFrequentMs = Number.NEGATIVE_INFINITY;
       const reactiver = (evenement) => {
         const estEvenementFrequent =
@@ -251,7 +253,10 @@
 
         if (estEvenementFrequent) {
           const maintenant = Date.now();
-          if (maintenant - derniereReinitialisationFrequentMs < DELAI_THROTTLE_REINITIALISATION_MS) {
+          if (
+            maintenant - derniereReinitialisationFrequentMs <
+            DELAI_THROTTLE_REINITIALISATION_MS
+          ) {
             return;
           }
           derniereReinitialisationFrequentMs = maintenant;
@@ -284,7 +289,4 @@
       initialisationEnCours = false;
     }
   }
-
-  // L’initialisation de la page est volontairement explicite : le script ne doit
-  // pas s’exécuter au chargement pour respecter la convention des scripts vanilla.
 })(globalThis);

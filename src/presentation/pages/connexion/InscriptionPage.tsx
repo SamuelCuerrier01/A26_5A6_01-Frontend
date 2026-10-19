@@ -11,24 +11,13 @@ import {
 } from '../../../domain/entities/Utilisateur';
 import { t, LANGUES_SUPPORTEES } from '../../../i18n/i18n-web';
 
-/**
- * Sous-ensemble de AuthGateway réellement nécessaire à cet écran (voir la
- * même règle dans LoginPage.tsx).
- */
 export type GatewayInscription = Pick<AuthGateway, 'inscrire'>;
 
 interface InscriptionPageProps {
   gateway: GatewayInscription;
   langue: string;
   changerLangue: (langue: string) => void;
-  /**
-   * Appelé une fois le compte créé et la session ouverte, avec le résultat
-   * complet de l'inscription (voir main.tsx) : le parent en tire le pseudo
-   * généré par défaut pour préremplir l'écran "Choisis ton pseudo" qui suit
-   * (voir PseudoChoicePage.tsx).
-   */
   onSessionEtablie?: (resultat: ResultatAuthentification) => void;
-  /** Retour à l'écran de connexion (voir main.tsx / LoginPage.tsx). */
   allerAConnexion: () => void;
 }
 
@@ -45,17 +34,11 @@ function traduireErreurSoumission(
   }
   const cleTraduction = `errors.${erreur.cle}`;
   const brutTraduit = t(langue, cleTraduction);
-  return brutTraduit === cleTraduction ? t(langue, 'errors.generic') : brutTraduit;
+  return brutTraduit === cleTraduction
+    ? t(langue, 'errors.generic')
+    : brutTraduit;
 }
 
-/**
- * Écran d'inscription : courriel + mot de passe SEULEMENT (pas de pseudo
- * choisi ici, voir genererPseudoParDefaut) — un pseudo par défaut est généré
- * côté backend, et l'écran "Choisis ton pseudo" (voir PseudoChoicePage.tsx et
- * main.tsx) est proposé juste après l'inscription pour le garder tel quel ou
- * en choisir un autre ; il reste aussi modifiable en tout temps depuis la
- * page profil.
- */
 export function InscriptionPage({
   gateway,
   langue,
@@ -69,7 +52,6 @@ export function InscriptionPage({
     useState<ErreurSoumission | null>(null);
   const [enCours, setEnCours] = useState(false);
   const courrielRef = useRef<HTMLInputElement>(null);
-
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -94,9 +76,6 @@ export function InscriptionPage({
           motDePasse,
         });
 
-        // Voir PseudoChoicePage.tsx / main.tsx : le parent navigue vers
-        // l'écran "Choisis ton pseudo" avec ce résultat plutôt que directement
-        // vers le tableau de bord.
         if (onSessionEtablie) {
           onSessionEtablie(resultat);
         } else {
@@ -134,7 +113,6 @@ export function InscriptionPage({
           </button>
         ))}
       </div>
-
 
       <div className="login-brand">ChatVardage</div>
       <form className="login-card" onSubmit={handleSubmit} noValidate>

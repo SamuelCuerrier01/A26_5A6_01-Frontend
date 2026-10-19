@@ -1,16 +1,3 @@
-// messages-prives/affichage.js — Rendu de la liste et de la conversation active.
-//
-// Page des messages privés (message-prive.html), découpée en scripts
-// classiques chargés dans l'ordre par message-prive.html : etat → historique → conversations → affichage → saisie → rail → message-prive.js
-// (démarrage). Ils partagent la même portée globale (const/let/fonctions de
-// haut niveau) : un fichier peut utiliser ce qu'un autre définit, à condition
-// que ce ne soit pas pendant son propre chargement — seul message-prive.js,
-// chargé en dernier, lance quoi que ce soit, au DOMContentLoaded (voir aussi
-// message-prive.chargement.test.ts, qui vérifie ce contrat).
-
-// Pagination de la liste (comme le rail des serveurs) : 15 conversations,
-// les plus récentes d'abord, puis « Voir plus » en ajoute autant. La
-// conversation ouverte reste toujours visible.
 const TAILLE_PAGE_CONVERSATIONS = 15;
 let limiteConversations = TAILLE_PAGE_CONVERSATIONS;
 
@@ -46,7 +33,6 @@ function renderConversationList() {
       avatar.classList.add('offline');
     }
     ChatUiShared.remplirAvatar(avatar, otherUser?.avatar);
-    // Photo : fiche de profil (le clic n'ouvre pas la conversation).
     ChatUiShared.rendreAvatarCliquable(avatar, {
       utilisateurId: otherUser?.id,
       nom: ChatUiShared.nomAffiche(otherUser) || t('dm.defaultUser'),
@@ -67,7 +53,6 @@ function renderConversationList() {
     lastMessageEl.textContent = subtitle;
 
     info.append(username, lastMessageEl);
-    // Messages non lus (compteurs de Message-Service, voir NotifPrefs).
     const compteur = document.createElement('span');
     compteur.classList.add('notif-count', 'notif-count--conversation');
     NotifPrefs.remplirCompteur(
@@ -99,7 +84,6 @@ function renderConversationList() {
     plus.addEventListener('click', () => {
       limiteConversations = limite + TAILLE_PAGE_CONVERSATIONS;
       renderConversationList();
-      // Les conversations ajoutées sont sous le bouton : on les fait apparaître.
       listElement
         .querySelectorAll('.conversation[data-conversation-id]')
         [limite]?.scrollIntoView?.({ block: 'nearest' });
@@ -118,9 +102,7 @@ function reinitialiserHistoriqueDm() {
   };
 }
 
-/** En-tête quand aucune conversation n'est ouverte. */
 function afficherAucuneConversation() {
-  // Ni photo ni pastille de présence : il n'y a personne en face.
   ChatUiShared.remplirAvatar(topbarAvatar, null);
   topbarAvatar?.classList.add('sans-presence');
   if (topbarAvatar) {
@@ -136,9 +118,6 @@ function afficherAucuneConversation() {
 }
 
 async function renderActiveConversation(options = {}) {
-  // Mêmes options que afficherMessages() (renderer.js) : contenu inséré en
-  // haut (conserverPositionScroll) ou ajouté en bas sans suivre
-  // (garderScroll) ; sinon défilement tout en bas.
   const { conserverPositionScroll = false, garderScroll = false } = options;
   if (!state.activeConversationId) {
     if (messageList) {
@@ -147,10 +126,6 @@ async function renderActiveConversation(options = {}) {
     afficherAucuneConversation();
     definirConversationActivePourNotifs(null);
     reinitialiserHistoriqueDm();
-    // composerAutorise (voir afficherEtatReseau) est calculé à partir de
-    // state.activeConversationId : sans ce rappel, un composer resterait
-    // activé alors qu'il n'y a plus de conversation active pour recevoir
-    // le message tapé.
     afficherEtatReseau();
     return;
   }
@@ -160,10 +135,6 @@ async function renderActiveConversation(options = {}) {
   );
 
   if (!conversation || !messageList) {
-    // `activeConversationId` pointe vers une conversation qui n'existe
-    // plus pour l'utilisateur courant (ex. conversation retirée) : on ne laisse pas
-    // l'ancienne conversation affichée sous le nouvel utilisateur, et on
-    // arrête de la considérer comme "active" pour les notifications.
     state.activeConversationId = null;
     if (messageList) {
       messageList.innerHTML = '';
@@ -171,36 +142,13 @@ async function renderActiveConversation(options = {}) {
     afficherAucuneConversation();
     definirConversationActivePourNotifs(null);
     reinitialiserHistoriqueDm();
-    // Voir le commentaire équivalent plus haut : activeConversationId
-    // vient d'être remis à null, composerAutorise doit être recalculé en
-    // conséquence.
     afficherEtatReseau();
     return;
   }
 
-  // On rappelle explicitement afficherEtatReseau() ici : composerAutorise
-  // (voir sa définition plus haut) est calculé à partir de
-  // state.activeConversationId, qui vient potentiellement d'être fixé par
-  // un appelant qui ne passe PAS par refreshConversations() (ex. un clic
-  // direct sur une conversation dans la liste, ou un changement de filtre
-  // — voir leurs listeners plus bas) — refreshConversations() rappelle
-  // bien afficherEtatReseau() de son côté, mais ces deux-là appellent
-  // renderActiveConversation() directement. Sans cet appel ici,
-  // composerAutorise resterait figé sur sa dernière valeur connue (par ex.
-  // désactivé s'il n'y avait provisoirement aucune conversation active),
-  // même après qu'une conversation valide soit redevenue active — voir
-  // afficherEtatReseau() dans renderer.js (afficherMessages()) pour
-  // l'équivalent salon et le même raisonnement.
   afficherEtatReseau();
 
-  // Changement de conversation active : on repart d'un historique manuel
-  // vide (voir chargerMessagesPlusAnciensDm et reinitialiserHistoriqueDm).
-  // `finHistorique` part de la page récente tout juste reçue
-  // (conversation.finHistorique, voir obtenirConversationsPrivees côté
-  // RealGatewayRuntime.js) — même logique que etatHistoriqueSalon dans
-  // renderer.js (voir son commentaire équivalent).
   if (etatHistoriqueDm.conversationId !== conversation.id) {
-    // Avant le marquage comme lu plus bas, qui remet le compteur à zéro.
     separateurDm = {
       conversationId: conversation.id,
       nonLus: NotifPrefs.nombreNonLus('prive', conversation.id),
@@ -216,27 +164,8 @@ async function renderActiveConversation(options = {}) {
     etatHistoriqueDm.finHistorique = Boolean(conversation.finHistorique);
   }
 
-  // La conversation affichée est "lue" — mais SEULEMENT si la fenêtre a
-  // effectivement le focus en ce moment (fenetreEstFocusee) : voir le
-  // commentaire équivalent dans renderer.js (afficherMessages()) pour le
-  // pourquoi (sinon ce rond de notification et la vraie notification
-  // système de main.js, qui exige déjà le focus pour la même décision,
-  // finissent en désaccord).
-  // La conversation "active" que main.js ne doit pas notifier (voir
-  // showMessageNotification côté main.js) reste définie qu'on ait le
-  // focus ou non : c'est elle qui est affichée à l'écran.
   definirConversationActivePourNotifs(conversation.id);
 
-  // Page récente (conversation.messages) + historique manuellement remonté
-  // (voir chargerMessagesPlusAnciensDm) : voir fusionnerHistoriqueDm plus
-  // haut. Les messages non livrés de cette conversation (voir
-  // messagesEnAttenteDm) sont fusionnés puis triés avec le reste par
-  // `envoi` plutôt que simplement ajoutés à la suite : ils ne sont PAS
-  // garantis d'être les plus récents — voir le commentaire équivalent sur
-  // tousLesMessages dans renderer.js pour le détail du pourquoi (un
-  // message réel plus récent peut arriver via refreshConversations()
-  // pendant qu'un brouillon plus ancien attend encore, ou deux brouillons
-  // peuvent être retentés dans le désordre).
   const messagesEnAttenteDeLaConversation = obtenirMessagesEnAttenteDm(
     conversation.id
   );
@@ -254,12 +183,6 @@ async function renderActiveConversation(options = {}) {
         )
       : (conversation.messages ?? [])
   );
-  // fusionnerHistoriqueDm() renvoie déjà un tableau trié par `envoi` : pas
-  // besoin de re-trier l'ensemble à chaque rendu quand il n'y a aucun
-  // message en attente (le cas de loin le plus fréquent). Quand il y en a,
-  // on fusionne au lieu de tout retrier — voir
-  // fusionnerAvecMessagesEnAttenteDm ci-dessus et son équivalent salon dans
-  // renderer.js.
   const messages = fusionnerAvecMessagesEnAttenteDm(
     messagesHistorique,
     messagesEnAttenteDeLaConversation
@@ -281,35 +204,22 @@ async function renderActiveConversation(options = {}) {
     topbarAvatar.classList.toggle('offline', !otherUser?.present);
     topbarAvatar.classList.remove('sans-presence');
     ChatUiShared.remplirAvatar(topbarAvatar, otherUser?.avatar);
-    // Le clic (branché une fois au démarrage, message-prive.js) lit cet id.
     topbarAvatar.dataset.userId = otherUser?.id ?? '';
     const nomTopbar = ChatUiShared.nomAffiche(otherUser) || t('dm.defaultUser');
     topbarAvatar.title = t('userCard.view', { name: nomTopbar });
     topbarAvatar.setAttribute('aria-label', topbarAvatar.title);
   }
   if (typingIndicator && isTypingNom) {
-    // Dans un DM, une seule autre personne peut potentiellement écrire
-    // (contrairement à un salon) — son nom est donc fixé une fois ici, à
-    // l'ouverture de la conversation, plutôt que recalculé à chaque
-    // battement de actualiserIndicateurSaisie() (qui ne gère, lui, que le
-    // show/hide selon l'état de saisie réel — voir plus bas).
     isTypingNom.textContent =
       ChatUiShared.nomAffiche(otherUser) || t('dm.defaultUser');
   }
 
-  // Mémorise la position de défilement AVANT de reconstruire la liste :
-  // voir le commentaire équivalent dans afficherMessages() (renderer.js)
-  // pour le pourquoi (sans ça, un chargement de messages plus anciens
-  // ferait sauter la vue tout en haut).
   const hauteurAvant = messageList.scrollHeight;
   const scrollAvant = messageList.scrollTop;
 
   messageList.innerHTML = '';
 
   if (messages.length === 0) {
-    // Conversation réellement vide : voir le commentaire équivalent dans
-    // afficherMessages() (renderer.js) pour le pourquoi on n'affiche pas la
-    // barre d'historique dans ce cas précis.
     const row = document.createElement('article');
     row.classList.add('message-row');
 
@@ -337,11 +247,8 @@ async function renderActiveConversation(options = {}) {
     separateurDm,
     state.currentUserId
   );
-  // Jusqu'où l'interlocuteur a lu (connu une fois les lectures chargées).
   const lecturesConnues = lecturesDm.conversationId === conversation.id;
   const luJusqua = lecturesConnues ? lecturesDm.luJusqua : null;
-  // « Distribué » / « Lu » sous mon dernier message, s'il est le dernier
-  // de la conversation (comme iMessage).
   const dernierEnvoi = messages
     .filter(
       (message) => message.auteurId === state.currentUserId && !message.nonLivre
@@ -406,7 +313,7 @@ async function renderActiveConversation(options = {}) {
 
     const text = document.createElement('p');
     text.classList.add('text');
-    remplirTexteMessage(text, message.contenu);
+    ChatUiShared.remplirTexteMessage(text, message.contenu);
 
     meta.append(authorEl, timeEl);
     if (message.modification) {
@@ -462,9 +369,6 @@ async function renderActiveConversation(options = {}) {
   if (garderScroll) {
     messageList.scrollTop = scrollAvant;
   } else if (conserverPositionScroll) {
-    // Charger plus ancien insère du contenu EN HAUT de la liste : voir le
-    // commentaire équivalent dans afficherMessages() (renderer.js) pour le
-    // pourquoi de ce recalcul.
     messageList.scrollTop =
       messageList.scrollHeight - hauteurAvant + scrollAvant;
   } else {
@@ -472,16 +376,6 @@ async function renderActiveConversation(options = {}) {
   }
 }
 
-/**
- * Charge la page de messages plus anciens qui précède ceux déjà affichés
- * pour la conversation active (pagination "charger plus ancien" — voir
- * obtenirMessagesPriveesAvant côté RealGatewayRuntime.js), et les fusionne
- * dans etatHistoriqueDm avant de redemander un rendu qui préserve la
- * position de défilement. Voir chargerMessagesPlusAnciensSalon dans
- * renderer.js pour l'équivalent salon (même garde-fous : pas d'effet si un
- * chargement est déjà en cours, si l'historique de la conversation active
- * est déjà entièrement remonté, ou si aucune conversation n'est active).
- */
 function creerActionsMessage(message, texteEl) {
   return ChatUiShared.creerActionsMessage({
     message,
@@ -569,11 +463,6 @@ async function executerPaginationDm({ taille } = {}) {
   }
 }
 
-/**
- * Accusé de lecture de la conversation `conversationId` (jusqu'où
- * l'interlocuteur l'a lue), puis nouveau rendu si elle est toujours
- * affichée. Best-effort : sans réponse, les messages restent « distribués ».
- */
 async function chargerLecturesDm(conversationId) {
   const generation = ++generationLecturesDm;
   const etat =
@@ -602,11 +491,6 @@ async function chargerLecturesDm(conversationId) {
   }
 }
 
-/**
- * Accusé de lecture reçu en temps réel. Lu depuis un de mes autres
- * appareils : les compteurs sont relus. Lu par l'interlocuteur de la
- * conversation affichée : ses ✓ passent à ✓✓.
- */
 async function appliquerLecture(lecture) {
   if (lecture?.deMoi) {
     await NotifPrefs.chargerNonLus(window.electronAPI);
@@ -629,9 +513,6 @@ async function appliquerLecture(lecture) {
   await renderActiveConversation({ garderScroll: true });
 }
 
-// Saut vers un message ancien (résultat de recherche) : pages plus grandes
-// que la pagination normale, et un plafond pour un très long historique.
-/** Charge une page depuis le resultat, sans parcourir l'historique. */
 async function allerAuMessageDm(messageId) {
   const id = state.activeConversationId;
   if (!id) return;
@@ -657,10 +538,6 @@ async function allerAuMessageDm(messageId) {
     historique.messagesAnciens = resultat.messages;
     historique.finHistorique = resultat.finHistorique;
     historique.ancreId = messageId;
-    // `autourId` ne rend que la cible et les plus anciens : on ajoute une
-    // page de plus récents. Une petite conversation s'affiche en entier, et
-    // « Charger les messages plus récents » ne reste que s'il en manque
-    // (ou si ce chargement échoue).
     try {
       const suite = await window.electronAPI.obtenirMessagesPriveesAvant({
         conversationId: id,

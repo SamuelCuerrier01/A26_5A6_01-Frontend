@@ -1,21 +1,5 @@
 'use strict';
-/**
- * Logique PURE des pages de chat (salons et messages privés) : aucune
- * dépendance au DOM, au réseau ni à Electron, pour pouvoir être testée à
- * 100 % (voir logique-interface.test.ts). Les pages (renderer/*.js,
- * message-prive.js) gardent l'affichage et appellent ces fonctions.
- *
- * Script classique (pas de bundler pour ces pages, voir l'en-tête de
- * i18n-browser.js) : exposé sous globalThis.LogiqueInterface (= window dans
- * les pages), où les tests le lisent aussi.
- */
 (function (racine) {
-  // --- Messages ----------------------------------------------------------
-
-  /**
-   * Page récente + historique remonté à la main : fusion sans doublon (le
-   * plus récent l'emporte pour un même id), triée par `champDate`.
-   */
   function fusionnerHistorique(messagesAnciens, messagesRecents, champDate) {
     const parId = new Map();
     [...messagesAnciens, ...messagesRecents].forEach((message) => {
@@ -26,13 +10,6 @@
     );
   }
 
-  /**
-   * Fusionne `messagesTries` (déjà trié par `champDate`) avec les brouillons
-   * non livrés, sans retrier tout l'historique : les pages redessinent très
-   * souvent (indicateur de saisie…), un tri complet à chaque fois coûterait
-   * O(n log n) pour 0 à 2 brouillons. Tri des seuls brouillons, puis fusion
-   * linéaire des deux listes triées.
-   */
   function fusionnerAvecMessagesEnAttente(
     messagesTries,
     messagesEnAttente,
@@ -61,14 +38,12 @@
     return (messages ?? []).some((message) => message.id === messageId);
   }
 
-  /** Ajoute un message reçu/envoyé (sans doublon), liste triée par date. */
   function ajouterMessage(messages, message, champDate) {
     const liste = messages ?? [];
     if (contientMessage(liste, message.id)) return liste;
     return [...liste, message].sort((a, b) => a[champDate] - b[champDate]);
   }
 
-  /** Message modifié : fusionné dans sa version existante (même id). */
   function remplacerMessage(messages, message) {
     return (messages ?? []).map((existant) =>
       existant.id === message.id ? { ...existant, ...message } : existant
@@ -79,24 +54,13 @@
     return (messages ?? []).filter((message) => message.id !== messageId);
   }
 
-  // --- Défilement --------------------------------------------------------
-
-  // En dessous de cette distance du bas, on « suit » la conversation.
   const SEUIL_PRES_DU_BAS_PX = 80;
 
-  /** Vrai si la liste (scrollHeight/scrollTop/clientHeight) est presque en
-   * bas. Sans liste, on considère qu'on suit la conversation. */
   function estPresDuBas(liste, seuil = SEUIL_PRES_DU_BAS_PX) {
     if (!liste) return true;
     return liste.scrollHeight - liste.scrollTop - liste.clientHeight <= seuil;
   }
 
-  /**
-   * Un nouveau message ne fait défiler la liste que s'il est dans la
-   * conversation affichée ET qu'on en est l'auteur ou qu'on était déjà en
-   * bas : sinon, quelqu'un qui relit l'historique (ou un message d'une autre
-   * conversation) était ramené tout en bas à chaque message reçu.
-   */
   function doitSuivreNouveauMessage({
     dansConversationAffichee,
     estAuteur,
@@ -105,19 +69,12 @@
     return Boolean(dansConversationAffichee && (estAuteur || presDuBas));
   }
 
-  // --- Listes -----------------------------------------------------------
-
-  /** Conversations privées : activité la plus récente en premier. */
   function trierConversations(conversations) {
     const date = (conversation) =>
       conversation.lastMessage?.envoi ?? conversation.messages?.[0]?.envoi ?? 0;
     return [...conversations].sort((a, b) => date(b) - date(a));
   }
 
-  // --- Contenu du serveur par défaut --------------------------------------
-  // Créé par migration avec des identifiants figés (Room-Service
-  // 20260924100000_serveurs, Message-Service 20260924110000_message_bienvenue)
-  // : affiché dans la langue de l'app tant qu'il n'a pas été renommé/modifié.
   const SALONS_PAR_DEFAUT = {
     '00000000-0000-4000-8000-000000000002': {
       nomOriginal: 'annonces',
@@ -130,8 +87,6 @@
   };
   const MESSAGE_BIENVENUE_ID = '00000000-0000-4000-8000-000000000101';
 
-  /** Clé de traduction du nom d'un salon par défaut, ou null (nom saisi par
-   * un utilisateur, jamais traduit). */
   function cleNomSalon(salon) {
     const parDefaut = SALONS_PAR_DEFAUT[salon.id];
     return parDefaut && salon.nom === parDefaut.nomOriginal
@@ -139,21 +94,15 @@
       : null;
   }
 
-  /** Clé de traduction du contenu d'un message (bienvenue non modifié), ou
-   * null (contenu affiché tel quel). */
   function cleContenuMessage(message) {
     return message.id === MESSAGE_BIENVENUE_ID && !message.modification
       ? 'channels.welcomeMessage'
       : null;
   }
 
-  // --- Recherche de messages ---------------------------------------------
-
-  /** Longueurs acceptées par Message-Service (GET /api/messages/search). */
   const LONGUEUR_MIN_RECHERCHE = 2;
   const LONGUEUR_MAX_RECHERCHE = 100;
 
-  /** Vrai si `texte` (espaces retirés) peut être cherché. */
   function peutRechercher(texte) {
     const longueur = String(texte ?? '').trim().length;
     return (
@@ -161,11 +110,6 @@
     );
   }
 
-  /**
-   * Extrait de `texte` centré sur la première occurrence de `terme` (casse
-   * ignorée), d'au plus `rayon` caractères de chaque côté, avec « … » aux
-   * coupures. Texte entier s'il est court ou si le terme est absent (début).
-   */
   function extraitAutour(texte, terme, rayon = 60) {
     const source = String(texte ?? '');
     if (source.length <= rayon * 2) return source;
@@ -180,11 +124,6 @@
     return `${debut > 0 ? '…' : ''}${source.slice(debut, fin)}${fin < source.length ? '…' : ''}`;
   }
 
-  /**
-   * Découpe `texte` en segments `{ texte, surligne }` : chaque occurrence de
-   * `terme` (casse ignorée) est surlignée. Les pages en font des nœuds texte
-   * et <mark>, jamais du HTML.
-   */
   function decouperSurligne(texte, terme) {
     const source = String(texte ?? '');
     const cherche = String(terme ?? '').toLocaleLowerCase();
@@ -213,15 +152,6 @@
     return segments;
   }
 
-  // --- Non-lus et accusés de lecture --------------------------------------
-
-  /**
-   * Index du premier message non lu de `messages` (triés du plus ancien au
-   * plus récent) : le `nonLus`-ième message d'autrui en partant de la fin,
-   * ou le premier message d'autrui chargé s'il y a plus de non-lus que de
-   * messages affichés. -1 s'il n'y a aucun non-lu (pas de séparateur).
-   * Les brouillons non livrés (`nonLivre`) sont toujours les miens.
-   */
   function indexPremierNonLu(messages, nonLus, moiId) {
     if (!(nonLus > 0)) return -1;
     let restants = nonLus;
@@ -235,8 +165,6 @@
     return index;
   }
 
-  /** Statut d'un de mes messages : 'lu' si l'autre a lu jusqu'à lui (ou
-   * plus loin), sinon 'distribue' (enregistré par le serveur). */
   function statutLecture(dateMessage, luJusqua, messageId, dernierMessageLuId) {
     const lu =
       luJusqua != null &&
@@ -246,8 +174,6 @@
     return lu ? 'lu' : 'distribue';
   }
 
-  /** Position maximale, y compris pour deux messages de même date.
-   * Sans identifiant (ancien contrat), toute la milliseconde est lue. */
   function fusionnerLecture(precedente, entrante) {
     if (entrante.luJusqua == null) return precedente;
     if (precedente.luJusqua == null || entrante.luJusqua > precedente.luJusqua)
@@ -262,7 +188,6 @@
     return precedente;
   }
 
-  /** Fixe la frontière à un identifiant : les nouveaux messages ne la déplacent pas. */
   function indexSeparateur(messages, separateur, moiId) {
     if (!Object.prototype.hasOwnProperty.call(separateur, 'premierId')) {
       const index = indexPremierNonLu(messages, separateur.nonLus, moiId);
@@ -271,8 +196,6 @@
     return messages.findIndex((message) => message.id === separateur.premierId);
   }
 
-  /** Noms des lecteurs qui ont lu jusqu'à `dateMessage` (ou plus loin),
-   * sauf `exclus` (l'auteur du message, soi-même), sans nom vide. */
   function lecteursJusqua(lecteurs, dateMessage, exclus = [], messageId) {
     return (lecteurs ?? [])
       .filter(
@@ -288,20 +211,10 @@
       .filter(Boolean);
   }
 
-  /** « Vu par » : les `max` premiers noms, et combien d'autres. */
   function resumeNoms(noms, max = 3) {
     return { noms: noms.slice(0, max), autres: Math.max(0, noms.length - max) };
   }
 
-  // --- Fiche de profil ----------------------------------------------------
-
-  /**
-   * Contenu de la fiche de profil d'un utilisateur ({ id, pseudo, alias }) :
-   * nom affiché (l'alias s'il en a choisi un, sinon le pseudo), ligne
-   * « @pseudo », initiale de l'avatar sans photo, et si le bouton « Message
-   * privé » est proposé : jamais pour soi-même, ni pour la personne dont la
-   * conversation privée est déjà affichée (`conversationAvecId`).
-   */
   function ficheProfil(utilisateur, contexte = {}) {
     const pseudo = utilisateur?.pseudo || '';
     const alias = utilisateur?.alias || '';

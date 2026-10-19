@@ -55,7 +55,7 @@ describe('validationMotDePasse', () => {
 });
 
 describe('genererPseudoParDefaut', () => {
-  it("dérive un pseudo à partir de la partie locale du courriel", () => {
+  it('dérive un pseudo à partir de la partie locale du courriel', () => {
     expect(genererPseudoParDefaut('ariane@example.com')).toBe('ariane');
   });
 
@@ -65,7 +65,7 @@ describe('genererPseudoParDefaut', () => {
     );
   });
 
-  it('complète jusqu\'à 3 caractères minimum', () => {
+  it("complète jusqu'à 3 caractères minimum", () => {
     expect(genererPseudoParDefaut('a@example.com')).toBe('a00');
   });
 

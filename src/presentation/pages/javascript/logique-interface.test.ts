@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-// Script classique : s'enregistre sur globalThis.LogiqueInterface.
 import './logique-interface.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const L = (globalThis as any).LogiqueInterface;
 
 const msg = (
@@ -44,13 +43,11 @@ describe('logique-interface', () => {
         'c',
         'x',
       ]);
-      // Brouillon le plus ancien : les messages livrés suivent tous.
       expect(
         L.fusionnerAvecMessagesEnAttente(tries, [msg('y', 0)], 'envoi').map(
           (m: { id: string }) => m.id
         )
       ).toEqual(['y', 'a', 'b', 'c']);
-      // Égalité de date : le message livré passe avant le brouillon.
       expect(
         L.fusionnerAvecMessagesEnAttente(
           [msg('a', 1)],
@@ -65,7 +62,6 @@ describe('logique-interface', () => {
       const liste = L.ajouterMessage(undefined, msg('b', 2), 'date');
       const avecA = L.ajouterMessage(liste, msg('a', 1), 'date');
       expect(avecA.map((m: { id: string }) => m.id)).toEqual(['a', 'b']);
-      // Déjà présent (écho temps réel d'un message envoyé) : même liste.
       expect(L.ajouterMessage(avecA, msg('a', 1), 'date')).toBe(avecA);
 
       const modifie = L.remplacerMessage(avecA, {
@@ -131,7 +127,6 @@ describe('logique-interface', () => {
       expect(
         L.trierConversations(conversations).map((c: { id: string }) => c.id)
       ).toEqual(['recente', 'premier-message', 'ancienne', 'sans']);
-      // Pas de modification de la liste d'origine.
       expect(conversations[0].id).toBe('sans');
     });
   });
@@ -228,7 +223,6 @@ describe('non-lus et accusés de lecture', () => {
     ];
     expect(L.indexPremierNonLu(messages, 2, 'moi')).toBe(2);
     expect(L.indexPremierNonLu(messages, 1, 'moi')).toBe(3);
-    // Plus de non-lus que de messages chargés : premier message d'autrui.
     expect(L.indexPremierNonLu(messages, 10, 'moi')).toBe(0);
     expect(L.indexPremierNonLu(messages, 0, 'moi')).toBe(-1);
     expect(L.indexPremierNonLu(messages, undefined, 'moi')).toBe(-1);

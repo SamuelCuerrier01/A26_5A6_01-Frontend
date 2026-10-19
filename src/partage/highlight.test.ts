@@ -25,12 +25,18 @@ describe('splitHighlight', () => {
   });
 
   it('retourne le texte entier sans terme ou sans occurrence', () => {
-    expect(splitHighlight('texte', '  ')).toEqual([{ text: 'texte', match: false }]);
-    expect(splitHighlight('texte', 'zz')).toEqual([{ text: 'texte', match: false }]);
+    expect(splitHighlight('texte', '  ')).toEqual([
+      { text: 'texte', match: false },
+    ]);
+    expect(splitHighlight('texte', 'zz')).toEqual([
+      { text: 'texte', match: false },
+    ]);
     expect(splitHighlight('', 'a')).toEqual([{ text: '', match: false }]);
   });
 
   it('ne surligne pas quand la casse change la longueur du texte', () => {
-    expect(splitHighlight('İstanbul', 'i')).toEqual([{ text: 'İstanbul', match: false }]);
+    expect(splitHighlight('İstanbul', 'i')).toEqual([
+      { text: 'İstanbul', match: false },
+    ]);
   });
 });

@@ -1,8 +1,3 @@
-/* Emoji en couleur partout, y compris sous Linux/WSL où aucune police emoji
-   n'est installée (les emoji s'affichaient en carrés). Police Twemoji Mozilla
-   (COLR, OFL-1.1, voir fonts/TWEMOJI-LICENSE.txt), embarquée : aucune
-   ressource externe (CSP default-src 'self'). `unicode-range` la limite aux
-   emoji : lettres, chiffres et ponctuation gardent la police du système. */
 @font-face {
   font-family: 'Twemoji';
   src: url('../fonts/twemoji.woff2') format('woff2');
@@ -28,27 +23,17 @@
   --text-primary: #eef5f2;
   --text-muted: #9fb8b3;
   --border: rgba(255, 255, 255, 0.08);
-  /* Boutons d'action principale et destructive. */
   --primary: #168f70;
   --on-primary: #ffffff;
   --danger: #e25555;
   --danger-text: #ff8a8a;
-  /* Survols / fonds légers, superposés à --bg-panel. */
   --hover-subtle: rgba(255, 255, 255, 0.04);
   --hover: rgba(255, 255, 255, 0.06);
   --hover-strong: rgba(255, 255, 255, 0.1);
-  /* Pastille « non lu » : blanche sur les fonds sombres. */
   --notif-dot: #ffffff;
-  /* Colonne de gauche (salons ET messages privés) : même largeur sur les
-     deux pages. Au moins 264 px pour le panneau utilisateur (nom + badge +
-     trois boutons, voir #user-panel .current-user-row). */
   --sidebar-width: 280px;
 }
 
-/* Thème clair : même identité turquoise, mais en teintes douces (fonds
-   menthe pâle, texte sarcelle foncé) plutôt qu'en aplats saturés —
-   voir la même palette dans message-prive.css et connexion.css. Posé sur
-   <html> via ThemeManager (theme-browser.js), pas une classe CSS séparée. */
 :root[data-theme='clair'] {
   --bg-app: #cdeee3;
   --bg-panel: #e3f6ef;
@@ -69,8 +54,6 @@
   --hover-subtle: rgba(11, 59, 54, 0.04);
   --hover: rgba(11, 59, 54, 0.07);
   --hover-strong: rgba(11, 59, 54, 0.1);
-  /* Pastille « non lu » : une pastille blanche disparaissait sur les fonds
-     menthe clairs ; même couleur que le texte, pour le même contraste. */
   --notif-dot: #0b3b36;
 }
 
@@ -78,9 +61,6 @@
   box-sizing: border-box;
 }
 
-/* --- Barre de titre personnalisée ---------------------------------------------
-   Bande glissable injectée par preload.js (fenêtre sans cadre, voir
-   createWindow dans main.js), avec les boutons réduire/agrandir/fermer. */
 :root {
   --titlebar-height: 32px;
   --titlebar-bg: #082e2a;
@@ -169,29 +149,15 @@
   outline-offset: -2px;
 }
 
-/* macOS : place pour les feux tricolores, à gauche. */
 :root.platform-darwin .app-titlebar {
   padding-left: 80px;
 }
 
-/* Place de la barre réservée DÈS le premier affichage (bordure aux
-   couleurs de la barre), sans attendre la classe has-app-titlebar posée par
-   preload.js au DOMContentLoaded : sinon toute la page était d'abord peinte
-   32 px trop haut puis « sautait » vers le bas à chaque changement de page.
-   La bande injectée (position fixe) vient se poser exactement dessus. */
 body {
   box-sizing: border-box;
   border-top: var(--titlebar-height) solid var(--titlebar-bg);
 }
 
-/* --- Barres de défilement -------------------------------------------------
-   Electron (Chromium) affiche par défaut la barre native du système (blanche
-   ou grise, hors thème). Toutes les zones défilantes de l'app (messages,
-   salons, conversations, rail des serveurs, dialogues…) la prennent aux
-   couleurs du thème clair ou sombre ; ce fichier est chargé par toutes les
-   pages. Chromium récent (Electron 44) applique `scrollbar-color` et
-   `scrollbar-width` ; les pseudo-éléments ::-webkit-scrollbar-* couvrent les
-   versions plus anciennes. */
 * {
   scrollbar-color: var(--bg-bubble) transparent;
   scrollbar-width: thin;
@@ -247,10 +213,6 @@ select {
   font-family: inherit;
 }
 
-/* Contenu des colonnes masqué pendant le chargement d'une page, puis affiché
-   en fondu (voir 'page-en-chargement' dans theme-browser.js). Seuls les
-   ENFANTS sont masqués : fonds et bordures des colonnes restent visibles,
-   le cadre de l'app ne clignote donc pas entre deux pages. */
 :is(#channel-sidebar, #dm-sidebar, #main, #profile-main) > * {
   transition: opacity 0.18s ease-out;
 }
@@ -267,20 +229,15 @@ select {
   }
 }
 
-/* Textes à traduire masqués (espace conservé) tant que la traduction n'est
-   pas appliquée — voir 'i18n-en-attente' dans theme-browser.js. */
 :root.i18n-en-attente [data-i18n] {
   visibility: hidden;
 }
 
-/* Logos et icônes : ni glisser-déposer (Chromium rend toute <img>
-   déplaçable par défaut), ni sélection au double-clic. */
 img {
   -webkit-user-drag: none;
   user-select: none;
 }
 
-/* --- Rail des serveurs ------------------------------------------- */
 #server-rail {
   width: 72px;
   flex: 0 0 auto;
@@ -290,7 +247,6 @@ img {
   align-items: center;
   padding: 12px 0;
   gap: 10px;
-  /* Beaucoup de serveurs : le rail défile au lieu de couper les derniers. */
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -307,8 +263,6 @@ img {
   object-fit: cover;
 }
 
-/* Bouton logo "retour à l'accueil" du rail (messages privés, profil) :
-   partagé ici pour que chaque page qui l'affiche en hérite. */
 #home-btn {
   width: 44px;
   height: 44px;
@@ -412,18 +366,10 @@ img {
   color: var(--text-primary);
 }
 
-/* .server-icon fixe `display: flex` ci-dessus, ce qui (la cascade donnant
-   toujours la priorité à une règle d'auteur sur la feuille de style par
-   défaut du navigateur, à spécificité égale ou non) l'emporterait sinon sur
-   la règle par défaut `[hidden] { display: none }` — l'attribut `hidden`
-   serait alors posé sans effet visuel. Concerne #open-create-channel-rail
-   (voir afficherActions() dans renderer.js, qui le masque entièrement pour
-   un rôle `utilisateur`). */
 .server-icon[hidden] {
   display: none;
 }
 
-/* Icône de serveur avec image (voir ChatUiShared.afficherRailServeurs). */
 .server-icon-image {
   width: 100%;
   height: 100%;
@@ -431,13 +377,11 @@ img {
   object-fit: cover;
 }
 
-/* « Voir plus » : page suivante d'icônes du rail (voir afficherRailServeurs). */
 .server-icon--more {
   font-size: 1.2rem;
   color: var(--text-primary);
 }
 
-/* Nombre de non-lus d'un serveur, en haut à droite de son icône. */
 .notif-count--rail {
   position: absolute;
   top: -4px;
@@ -454,7 +398,6 @@ img {
   font-size: 1.3rem;
 }
 
-/* Nom du serveur actif, en haut de la colonne des salons : ouvre son menu. */
 .server-menu-btn {
   flex: 1;
   min-width: 0;
@@ -493,10 +436,6 @@ img {
   font-size: 0.8rem;
 }
 
-/* Double classe : doit l'emporter sur `.choice-section-title` (marge nulle
-   en haut), définie plus loin dans ce fichier. */
-/* Boutons pleine largeur empilés dans une fenêtre (menu du serveur,
-   paramètres du salon) : un peu d'air entre eux. */
 .full-width + .full-width,
 .full-width + .confirm-delete-row,
 .confirm-delete-row + .full-width {
@@ -507,7 +446,6 @@ img {
   margin-top: 18px;
 }
 
-/* Avatar carré arrondi d'un serveur dans une liste (recherche de serveurs). */
 .avatar.small.server-avatar {
   border-radius: 9px;
   color: var(--text-primary);
@@ -519,13 +457,10 @@ img {
   border-radius: 9px;
 }
 
-/* Un serveur n'a pas de présence : pas de pastille (voir
-   .user-choice .avatar.small::after). */
 .user-choice .avatar.small.server-avatar::after {
   content: none;
 }
 
-/* --- Colonne des salons -------------------------------------------- */
 #channel-sidebar {
   width: var(--sidebar-width);
   flex: 0 0 auto;
@@ -586,7 +521,6 @@ img {
   position: relative;
 }
 
-/* Place du compteur de non-lus (.notif-count--channel) à droite du nom. */
 #channel-list li button:has(.notif-count:not([hidden])) {
   padding-right: 40px;
 }
@@ -634,8 +568,6 @@ img {
   font-weight: 600;
 }
 
-/* Affichage en lecture seule de l'utilisateur connecté (voir
-   index.html/message-prive.html). */
 .current-user-row {
   display: flex;
   align-items: center;
@@ -665,11 +597,6 @@ img {
   white-space: nowrap;
 }
 
-/* ============================================================
-   PANNEAU UTILISATEUR
-   Même rendu dans index.html et message-prive.html
-   ============================================================ */
-
 #user-panel {
   position: relative;
   flex: 0 0 auto;
@@ -696,9 +623,6 @@ img {
   position: relative;
 }
 
-/* Photo de profil dans n'importe quel rond d'avatar (voir
-   ChatUiShared.remplirAvatar) : couvre l'initiale/le dégradé, la pastille
-   ::after reste par-dessus. */
 .avatar {
   position: relative;
 }
@@ -716,9 +640,6 @@ img {
   color: transparent;
 }
 
-/* Avatar de l'utilisateur connecté : photo de profil (ou initiale) et
-   pastille verte/rouge de présence (voir ChatUiShared.afficherAvatarCourant).
-   Pas de pastille tant que l'état n'est pas connu (data-presence absent). */
 #user-panel .user-avatar {
   display: grid;
   place-items: center;
@@ -762,10 +683,6 @@ img {
   overflow: hidden;
 }
 
-/* Nom puis badge de rôle EN DESSOUS : à côté des trois boutons du panneau,
-   il ne reste que ~95 px, trop peu pour "ariane" + "MODÉRATEUR" sur une
-   seule ligne (le badge, qui ne rétrécit pas, était coupé). Le nom garde
-   toute la largeur et passe en "…" s'il est trop long. */
 #user-panel .current-user-row {
   flex-direction: column;
   align-items: flex-start;
@@ -777,15 +694,11 @@ img {
   max-width: 100%;
 }
 
-/* Filet de sécurité (traduction plus longue, police système plus large) :
-   "…" plutôt qu'un mot coupé net, libellé complet au survol (title). */
 #user-panel .role-badge {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Compteur de messages non lus (salons, conversations privées) : nombre
-   tenu par Message-Service, « 99+ » au-delà (voir NotifPrefs.remplirCompteur). */
 .notif-count {
   display: inline-flex;
   align-items: center;
@@ -886,7 +799,6 @@ img {
   accent-color: var(--accent-start);
 }
 
-/* Case « Afficher le contenu », séparée des modes (boutons radio). */
 #user-panel .notif-menu-option--case {
   margin-top: 4px;
   border-top: 1px solid var(--border);
@@ -912,7 +824,6 @@ img {
   font-size: 0.75rem;
 }
 
-/* Bouton Invitations de index.html. */
 .sidebar-action {
   margin: 8px;
   padding: 10px 12px;
@@ -935,7 +846,6 @@ img {
   font-weight: 700;
 }
 
-/* --- Zone principale (salon actif) ---------------------------------- */
 #main {
   flex: 1;
   background: var(--bg-app);
@@ -1010,9 +920,6 @@ img {
   color: var(--danger-text);
 }
 
-/* Ligne de confirmation "Supprimer ce salon ?" (voir el.roomSettings dans
-   renderer.js) — même esprit que .message-actions.confirming-delete, mais
-   pour un panneau de dialogue plutôt qu'une ligne de message. */
 .confirm-delete-row {
   display: flex;
   align-items: center;
@@ -1020,9 +927,6 @@ img {
   flex-wrap: wrap;
 }
 
-/* --- Panneau « Membres de … » (voir el.membres dans renderer.js) ----------
-   Une carte par membre : avatar + pastille de présence, nom et ligne
-   secondaire (présence · rôle), actions alignées à droite. */
 .member-list.member-list {
   max-height: min(60vh, 480px);
   overflow-y: auto;
@@ -1133,10 +1037,6 @@ img {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
-/* --- Statut réseau (pastille dans l'en-tête) -------------------------------
-   Discret quand tout va bien (point vert + "Connecté"), plus visible dès que
-   la connexion est perdue : fond teinté, détail de la cause et du compte à
-   rebours, bouton "Réessayer". Voir afficherEtatReseau dans chat-ui-shared.js. */
 .connection-status {
   --etat: var(--online);
   display: flex;
@@ -1153,9 +1053,6 @@ img {
     border-color 0.2s ease;
 }
 
-/* État initial du HTML, avant la première réponse de main.js : l'espace
-   est réservé mais rien n'est affiché (sinon "Déconnecté" clignotait à
-   chaque changement de page). */
 .connection-status[data-state='inconnu'] {
   visibility: hidden;
 }
@@ -1247,12 +1144,6 @@ img {
   min-height: 0;
 }
 
-/* --- Historique et pagination des messages ------------------------------ */
-/* Barre affichée en haut de la liste des messages (#message-list, mais
-   partagée avec message-prive.css/#message-list) pour représenter l'état de
-   l'historique : chargement en cours, historique épuisé, ou bouton pour en
-   charger davantage (voir creerStatutHistorique dans renderer.js et
-   creerStatutHistoriqueDm dans message-prive.js). */
 .historique-statut {
   flex: 0 0 auto;
   text-align: center;
@@ -1297,8 +1188,6 @@ button.historique-statut.historique-statut--bouton:hover {
 .message-row .message-body {
   display: flex;
   flex-direction: column;
-  /* La bulle épouse son texte au lieu de s'étirer sur la largeur de la
-     ligne auteur + heure (voir .message-row.own pour l'alignement à droite). */
   align-items: flex-start;
   gap: 4px;
   min-width: 0;
@@ -1309,7 +1198,6 @@ button.historique-statut.historique-statut--bouton:hover {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  /* Auteur, heure et « (modifié) » toujours sur une seule ligne. */
   white-space: nowrap;
 }
 
@@ -1328,7 +1216,6 @@ button.historique-statut.historique-statut--bouton:hover {
   font-size: 0.92rem;
   line-height: 1.4;
   word-wrap: break-word;
-  /* Retours à la ligne conservés (ex. message de bienvenue de #annonces). */
   white-space: pre-wrap;
 }
 
@@ -1415,8 +1302,6 @@ dialog {
   color: var(--text-primary);
   background: var(--bg-panel);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
-  /* Jamais de défilement horizontal : un contenu trop large (nom sans
-     espace, par exemple) passe à la ligne au lieu d'élargir le dialogue. */
   overflow-x: hidden;
 }
 
@@ -1436,9 +1321,6 @@ dialog::backdrop {
   margin-bottom: 18px;
 }
 
-/* Titre avec un nom de serveur/salon potentiellement très long et sans
-   espace (« Membres de bbbb… ») : il rétrécit et se coupe n'importe où
-   plutôt que de pousser le bouton de fermeture hors du dialogue. */
 .dialog-header h2 {
   flex: 1 1 auto;
   min-width: 0;
@@ -1451,9 +1333,6 @@ dialog::backdrop {
   flex: 0 0 auto;
 }
 
-/* Même règle pour le contenu (cartes d'invitation, serveurs trouvés,
-   paramètres…) : un nom sans espace passe à la ligne au lieu d'être rogné.
-   Les noms de membres, eux, restent sur une ligne avec « … » (.member-name). */
 #dialog-content {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1517,7 +1396,6 @@ dialog::backdrop {
   color: var(--text-muted);
 }
 
-/* Fenêtre "Nouveau message privé" : recherche + liste de candidats. */
 .dm-search {
   width: 100%;
   height: 38px;
@@ -1551,9 +1429,6 @@ dialog::backdrop {
   font-weight: 700;
 }
 
-/* Pastille de présence des sélecteurs d'utilisateurs (DM et invitations) :
-   définie ici, et pas seulement dans message-prive.css, pour la page des
-   salons aussi. */
 .user-choice .avatar.small::after {
   content: '';
   position: absolute;
@@ -1630,8 +1505,6 @@ dialog::backdrop {
   margin-left: auto;
 }
 
-/* En haut, centré sous la barre de titre : en bas à droite, il recouvrait
-   la zone de saisie et le bouton Envoyer. */
 #toast {
   position: fixed;
   top: calc(var(--titlebar-height) + 12px);
@@ -1662,10 +1535,6 @@ dialog::backdrop {
   color: var(--accent-start);
 }
 
-/* --- Notifications : rond "non lu" + menu de préférences --------------- */
-/* Élément toujours présent dans le DOM, visibilité pilotée par l'attribut
-   `hidden` (même convention que le reste de l'app, ex. #private-indicator),
-   plutôt que recréé/détruit à chaque rendu. */
 .notif-dot {
   border-radius: 50%;
   background: var(--notif-dot);
@@ -1838,7 +1707,6 @@ dialog::backdrop {
   color: var(--danger-text);
 }
 
-/* Modification de message : conserver le rendu visuel du message normal. */
 .message-edit-row {
   display: flex;
   align-items: center;
@@ -1881,13 +1749,6 @@ dialog::backdrop {
   color: var(--text-primary);
 }
 
-/* Message "non livré" : tapé/renvoyé hors ligne, jamais parti vers le
-   serveur (voir creerMessageEnAttente / creerActionsMessageNonLivre dans
-   chat-ui-shared.js). La bulle reste visible mais estompée pour signaler
-   qu'elle n'est pas encore confirmée, avec un badge + réessayer/supprimer
-   toujours affichés (pas seulement au survol, contrairement à
-   .message-actions normal) puisque l'utilisateur doit voir l'échec sans
-   avoir à chercher. */
 .message-row.non-livre .text {
   opacity: 0.6;
 }
@@ -1909,17 +1770,6 @@ dialog::backdrop {
   color: var(--offline, #ef4444);
 }
 
-/* Scopée à .message-row.non-livre .message-actions (spécificité (0,3,0))
-   plutôt qu'à une classe dédiée du type .message-non-livre-actions seule
-   (0,1,0) : une telle classe ne l'emporterait sur la règle opacity:0 de
-   .message-actions ci-dessus que grâce à son ordre de déclaration dans ce
-   fichier — un futur réarrangement (ou l'ajout d'une règle .message-actions
-   plus spécifique) pourrait masquer à nouveau réessayer/supprimer par
-   erreur. Cette forme gagne quel que soit l'ordre des règles, et documente
-   explicitement qu'elle vise les actions d'un message non livré. (Une
-   classe .message-non-livre-actions avait été ajoutée en plus dans
-   chat-ui-shared.js mais n'était jamais ciblée par une règle CSS — elle a
-   été retirée comme code mort.) */
 .message-row.non-livre .message-actions {
   opacity: 1;
 }
@@ -1930,7 +1780,6 @@ dialog::backdrop {
   font-size: 0.75rem;
 }
 
-/* --- Recherche de messages (dialogue partagé par les deux pages) --------- */
 .search-dialog {
   width: min(560px, calc(100vw - 40px));
 }
@@ -2003,8 +1852,6 @@ dialog::backdrop {
   color: var(--on-primary);
 }
 
-/* --- Non-lus et accusés de lecture ------------------------------------- */
-/* Ligne « Nouveaux messages » au-dessus du premier non-lu. */
 .unread-separator {
   display: flex;
   align-items: center;
@@ -2025,7 +1872,6 @@ dialog::backdrop {
   background: var(--primary);
 }
 
-/* ✓ distribué / ✓✓ lu, dans la ligne meta de mes messages privés. */
 .read-status {
   font-size: 0.72rem;
   letter-spacing: -0.12em;
@@ -2036,7 +1882,6 @@ dialog::backdrop {
   color: var(--primary);
 }
 
-/* « Lu à 14:32 », « Vu par … » sous le message concerné. */
 .read-receipt {
   margin: 2px 0 0;
   color: var(--text-muted);
@@ -2048,8 +1893,6 @@ dialog::backdrop {
   text-align: right;
 }
 
-/* Message atteint depuis la recherche : mis en évidence quelques secondes
-   (voir ChatUiShared.allerAuMessageAffiche). */
 .message-row.message-cible .text {
   box-shadow: 0 0 0 2px var(--primary);
   transition: box-shadow 0.3s ease;
@@ -2075,9 +1918,6 @@ dialog::backdrop {
   }
 }
 
-/* --- Fiche de profil (ChatUiShared.ouvrirFicheProfil) ---------------
-   Ouverte par un clic sur la photo d'un utilisateur (messages, liste des
-   messages privés, membres d'un serveur). Mêmes règles sur les deux pages. */
 .avatar-clickable {
   cursor: pointer;
 }
