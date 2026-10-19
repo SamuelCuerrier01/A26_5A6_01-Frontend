@@ -1106,7 +1106,53 @@
     });
   }
 
+  function creerIconeMain() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'icone-main');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const groupe = document.createElementNS(NS, 'g');
+    groupe.setAttribute('fill', 'currentColor');
+    const paume = document.createElementNS(NS, 'circle');
+    paume.setAttribute('cx', '8');
+    paume.setAttribute('cy', '10');
+    paume.setAttribute('r', '4');
+    groupe.appendChild(paume);
+    for (const angle of [-30, -10, 10, 30]) {
+      const doigt = document.createElementNS(NS, 'rect');
+      doigt.setAttribute('x', '-1');
+      doigt.setAttribute('y', '-6');
+      doigt.setAttribute('width', '2');
+      doigt.setAttribute('height', '5');
+      doigt.setAttribute('rx', '1');
+      doigt.setAttribute('transform', `translate(8 6) rotate(${angle})`);
+      groupe.appendChild(doigt);
+    }
+    svg.appendChild(groupe);
+    return svg;
+  }
+
+  const EMOJI_VERS_ICONE = { '👋': creerIconeMain };
+
+  function remplirTexteMessage(element, texte) {
+    element.replaceChildren();
+    const emojiConnus = Object.keys(EMOJI_VERS_ICONE);
+    const decoupage = new RegExp(`(${emojiConnus.join('|')})`, 'gu');
+    for (const segment of texte.split(decoupage)) {
+      if (!segment) continue;
+      const creerIcone = EMOJI_VERS_ICONE[segment];
+      element.appendChild(
+        creerIcone ? creerIcone() : document.createTextNode(segment)
+      );
+    }
+  }
+
   window.ChatUiShared = Object.freeze({
+    remplirTexteMessage,
     afficherChargementRecherche,
     estMessageCible,
     allerAuMessageAffiche,

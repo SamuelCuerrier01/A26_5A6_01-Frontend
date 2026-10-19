@@ -313,7 +313,7 @@ async function renderActiveConversation(options = {}) {
 
     const text = document.createElement('p');
     text.classList.add('text');
-    remplirTexteMessage(text, message.contenu);
+    ChatUiShared.remplirTexteMessage(text, message.contenu);
 
     meta.append(authorEl, timeEl);
     if (message.modification) {
