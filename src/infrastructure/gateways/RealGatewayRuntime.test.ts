@@ -2338,6 +2338,114 @@ describe('isolation et renouvellement des sessions', () => {
     runtime.ouvrirSession(session);
     return { runtime, socket };
   };
+  it('un 401 de présence pendant le changement de mot de passe ne renouvelle pas les anciens jetons', async () => {
+    const { runtime } = prepare();
+    let complete!: (value: unknown) => void;
+    const login = new Promise((resolve) => {
+      complete = resolve;
+    });
+    const fetcher = vi.fn((url: string, init: RequestInit) => {
+      if (url.endsWith('/login')) return login;
+      if (init.method === 'PATCH')
+        return Promise.resolve(reponseJson(UTILISATEUR_BRUT));
+      return Promise.resolve(reponseJson({}, 401));
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const change = runtime.profilModifierCompte({
+      motDePasse: 'nouveau',
+      motDePasseActuel: 'ancien',
+    });
+    await vi.waitFor(() =>
+      expect(fetcher.mock.calls.some(([url]) => url.endsWith('/login'))).toBe(
+        true
+      )
+    );
+    await expect(runtime.appelHttp('/api/config-utilisateur')).rejects.toThrow(
+      'ERR_HTTP_401'
+    );
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith('/refresh'))).toBe(
+      false
+    );
+    complete(reponseJson(renouvellee));
+    await change;
+    expect(runtime.jeton).toBe('access-new');
+    expect(runtime.utilisateurConnecte.id).toBe(UTILISATEUR_BRUT.id);
+    runtime.fermerSocket();
+  });
+  it('la déconnexion locale se termine sans attendre la révocation réseau', async () => {
+    const { runtime } = prepare();
+    let complete!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      complete = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending));
+    let terminee = false;
+    const logout = runtime.deconnexion().then(() => {
+      terminee = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(terminee).toBe(true);
+    expect(runtime.utilisateurConnecte).toBeNull();
+    complete(reponseJson(undefined, 204));
+    await logout;
+  });
+  it.each([
+    ['rotation en cours', true, false],
+    ['rotation terminée', false, true],
+  ])(
+    'ignore un renouvellement réussi devenu obsolète : %s',
+    async (_cas, rotation, remplace) => {
+      const { runtime } = prepare();
+      let complete!: (value: unknown) => void;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          () =>
+            new Promise((resolve) => {
+              complete = resolve;
+            })
+        )
+      );
+      const refresh = runtime.renouvelerSession();
+      runtime.rotationJetonEnCours = rotation;
+      if (remplace) runtime.refreshToken = 'rotation-explicite';
+      complete(reponseJson(renouvellee));
+      await expect(refresh).rejects.toThrow('ERR_RECONNEXION_REQUISE');
+      expect(runtime.jeton).toBe('access-old');
+      expect(runtime.refreshToken).toBe(
+        remplace ? 'rotation-explicite' : 'refresh-old'
+      );
+      runtime.fermerSocket();
+    }
+  );
+  it.each([
+    ['rotation en cours', true, false],
+    ['rotation terminée', false, true],
+  ])(
+    'un refus de renouvellement obsolète ne déconnecte pas la session : %s',
+    async (_cas, rotation, remplace) => {
+      const { runtime } = prepare();
+      let complete!: (value: unknown) => void;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          () =>
+            new Promise((resolve) => {
+              complete = resolve;
+            })
+        )
+      );
+      const refresh = runtime.renouvelerSession();
+      runtime.rotationJetonEnCours = rotation;
+      if (remplace) runtime.refreshToken = 'rotation-explicite';
+      complete(reponseJson({}, 401));
+      await expect(refresh).rejects.toThrow('ERR_HTTP_401');
+      expect(runtime.utilisateurConnecte.id).toBe(UTILISATEUR_BRUT.id);
+      expect(runtime.jeton).toBe('access-old');
+      runtime.fermerSocket();
+    }
+  );
   it('renouvelle un accès expiré puis rejoue la requête avec les nouveaux jetons', async () => {
     const { runtime } = prepare();
     const fetcher = vi

@@ -113,6 +113,7 @@ class RealGatewayRuntime {
       reponse.status === 401 &&
       jeton &&
       this.refreshToken &&
+      !this.rotationJetonEnCours &&
       reessayer &&
       !CHEMINS_SANS_SESSION.includes(chemin)
     ) {

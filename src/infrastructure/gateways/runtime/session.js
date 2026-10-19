@@ -25,6 +25,7 @@ module.exports = {
   renouvelerSession() {
     if (this.renouvellementEnCours) return this.renouvellementEnCours;
     const generation = this.generationSession;
+    const refreshToken = this.refreshToken;
     const renouvellement = this.appelHttp('/api/auth/refresh', {
       methode: 'POST',
       corps: { refresh_token: this.refreshToken },
@@ -39,12 +40,16 @@ module.exports = {
           !reponse.refresh_token
         )
           throw new Error('ERR_RECONNEXION_REQUISE');
+        if (this.rotationJetonEnCours || this.refreshToken !== refreshToken)
+          throw new Error('ERR_RECONNEXION_REQUISE');
         this.memoriserJetons(reponse);
         this.connecterSocket();
       })
       .catch(async (erreur) => {
         if (
           generation === this.generationSession &&
+          !this.rotationJetonEnCours &&
+          this.refreshToken === refreshToken &&
           [400, 401, 403].includes(erreur.statut)
         ) {
           await this.deconnexion();
@@ -210,7 +215,7 @@ module.exports = {
     this.etatsSaisie = [];
     this.definirEtatConnexion('deconnecte');
     if (refreshToken) {
-      await this.appelHttp('/api/auth/logout', {
+      void this.appelHttp('/api/auth/logout', {
         methode: 'POST',
         corps: { refresh_token: refreshToken },
       }).catch(() => undefined);
