@@ -165,6 +165,10 @@ module.exports = {
 
   async deconnexionAutres() {
     const generation = this.generationSession;
+    if (this.renouvellementEnCours) {
+      await this.renouvellementEnCours;
+      this.verifierGenerationSession(generation);
+    }
     this.verifierReseauConnecte();
     this.rotationJetonEnCours = true;
     try {
@@ -279,6 +283,10 @@ module.exports = {
 
   async profilModifierCompte({ motDePasse, motDePasseActuel }) {
     const generation = this.generationSession;
+    if (this.renouvellementEnCours) {
+      await this.renouvellementEnCours;
+      this.verifierGenerationSession(generation);
+    }
     const corps = { mot_de_passe_actuel: motDePasseActuel };
     if (motDePasse !== undefined) corps.mot_de_passe = motDePasse;
     this.rotationJetonEnCours = motDePasse !== undefined;

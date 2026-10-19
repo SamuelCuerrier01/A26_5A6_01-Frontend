@@ -2482,6 +2482,77 @@ describe('isolation et renouvellement des sessions', () => {
       runtime.fermerSocket();
     }
   );
+  it.each(['mot-de-passe', 'autres-appareils'])(
+    'attend le renouvellement déjà engagé avant la rotation %s',
+    async (operation) => {
+      const { runtime } = prepare();
+      let complete!: (value: unknown) => void;
+      const pending = new Promise((resolve) => {
+        complete = resolve;
+      });
+      const fetcher = vi.fn((url: string, init: RequestInit) => {
+        if (url.endsWith('/refresh')) return pending;
+        if (url.endsWith('/login'))
+          return Promise.resolve(reponseJson(renouvellee));
+        if (url.endsWith('/logout-others'))
+          return Promise.resolve(reponseJson(renouvellee));
+        if (init.method === 'PATCH')
+          return Promise.resolve(reponseJson(UTILISATEUR_BRUT));
+        return Promise.resolve(reponseJson({ ok: true }));
+      });
+      vi.stubGlobal('fetch', fetcher);
+      const refresh = runtime.renouvelerSession();
+      const change =
+        operation === 'mot-de-passe'
+          ? runtime.profilModifierCompte({
+              motDePasse: 'nouveau',
+              motDePasseActuel: 'ancien',
+            })
+          : runtime.deconnexionAutres();
+      const finished = Promise.all([refresh, change]);
+      await Promise.resolve();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(runtime.rotationJetonEnCours).toBe(false);
+      complete(reponseJson(renouvellee));
+      await finished;
+      expect(
+        (fetcher.mock.calls[1][1].headers as Record<string, string>)
+          .Authorization
+      ).toBe('Bearer access-new');
+      expect(runtime.refreshToken).toBe('refresh-new');
+      expect(runtime.utilisateurConnecte.id).toBe(UTILISATEUR_BRUT.id);
+      expect(runtime.rotationJetonEnCours).toBe(false);
+      runtime.fermerSocket();
+    }
+  );
+  it.each(['mot-de-passe', 'autres-appareils'])(
+    'abandonne la rotation %s si la session change pendant le renouvellement préalable',
+    async (operation) => {
+      const { runtime } = prepare();
+      let complete!: () => void;
+      runtime.renouvellementEnCours = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      const fetcher = vi.fn().mockResolvedValue(reponseJson(renouvellee));
+      vi.stubGlobal('fetch', fetcher);
+      const change =
+        operation === 'mot-de-passe'
+          ? runtime.profilModifierCompte({
+              motDePasse: 'nouveau',
+              motDePasseActuel: 'ancien',
+            })
+          : runtime.deconnexionAutres();
+      const assertion = expect(change).rejects.toThrow('ERR_SESSION_FERMEE');
+      runtime.generationSession += 1;
+      runtime.jeton = 'bob-access';
+      complete();
+      await assertion;
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(runtime.jeton).toBe('bob-access');
+      expect(runtime.rotationJetonEnCours).toBe(false);
+      runtime.fermerSocket();
+    }
+  );
   it('renouvelle un accès expiré puis rejoue la requête avec les nouveaux jetons', async () => {
     const { runtime } = prepare();
     const fetcher = vi
