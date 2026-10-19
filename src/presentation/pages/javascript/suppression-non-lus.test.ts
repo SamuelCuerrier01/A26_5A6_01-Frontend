@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 import './notif-prefs.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- script classique
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NotifPrefs = (window as any).NotifPrefs;
 
 it.each(['salons', 'prives'])(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import './logique-interface.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const L = (globalThis as any).LogiqueInterface;
 
 const msg = (

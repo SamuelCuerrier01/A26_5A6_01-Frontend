@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import './notif-prefs.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NotifPrefs = (window as any).NotifPrefs;
 
 const installerStockageMemoire = () => {

@@ -636,7 +636,7 @@ describe('page des salons (scripts découpés)', () => {
         obtenirNonLus: { salons: { autre: 2 }, prives: {} },
       },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- script non typé
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).NotifPrefs.definirMode('moi', 'aucune');
     window.eval('afficherSalons()');
     expect(
