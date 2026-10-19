@@ -125,6 +125,33 @@ describe('RealGatewayRuntime', () => {
   });
 
   describe('authentifier / inscrire', () => {
+    it.each([
+      ['/api/auth/login', 401, 'ERR_IDENTIFIANTS_INVALIDES'],
+      ['/api/auth/login', 400, 'ERR_HTTP_400'],
+      ['/api/auth/register', 400, 'ERR_INSCRIPTION_INVALIDE'],
+      ['/api/auth/register', 401, 'ERR_HTTP_401'],
+      ['/api/utilisateurs/moi', 401, 'ERR_HTTP_401'],
+    ])(
+      'traduit %s (%i) en %s sans exposer le détail serveur',
+      async (chemin, statut, code) => {
+        const { runtime } = creerRuntime();
+        vi.stubGlobal(
+          'fetch',
+          vi
+            .fn()
+            .mockResolvedValue(
+              reponseJson({ erreur: 'détail interne' }, statut)
+            )
+        );
+
+        await expect(runtime.appelHttp(chemin)).rejects.toMatchObject({
+          message: code,
+          statut,
+        });
+        expect(runtime.utilisateurConnecte).toBeNull();
+      }
+    );
+
     it('authentifier envoie mot_de_passe (pas motDePasse) et ouvre la session', async () => {
       const { runtime } = creerRuntime();
       const fetchMock = vi
@@ -211,7 +238,7 @@ describe('RealGatewayRuntime', () => {
           motDePasse: 'secret123',
           pseudo: 'ariane',
         })
-      ).rejects.toMatchObject({ message: 'ERR_HTTP_400' });
+      ).rejects.toMatchObject({ message: 'ERR_INSCRIPTION_INVALIDE' });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });

@@ -134,7 +134,13 @@ class RealGatewayRuntime {
         void this.verifierSessionApres401();
       }
       const corpsErreur = await reponse.json().catch(() => null);
-      const erreur = new Error(`ERR_HTTP_${reponse.status}`);
+      let codeErreur = `ERR_HTTP_${reponse.status}`;
+      if (chemin === '/api/auth/login' && reponse.status === 401) {
+        codeErreur = 'ERR_IDENTIFIANTS_INVALIDES';
+      } else if (chemin === '/api/auth/register' && reponse.status === 400) {
+        codeErreur = 'ERR_INSCRIPTION_INVALIDE';
+      }
+      const erreur = new Error(codeErreur);
       erreur.statut = reponse.status;
       erreur.detail = corpsErreur?.erreur;
       throw erreur;
