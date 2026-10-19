@@ -106,6 +106,9 @@ module.exports = {
   },
 
   async inscrire({ courriel, motDePasse, pseudo }) {
+    if (typeof pseudo !== 'string' || pseudo.trim() === '') {
+      throw new Error('ERR_PSEUDO_MANQUANT');
+    }
     this.generationSession += 1;
     this.renouvellementEnCours = null;
     const generation = this.generationSession;

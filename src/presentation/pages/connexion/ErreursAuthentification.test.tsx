@@ -20,17 +20,18 @@ afterEach(() => {
 });
 
 it.each([
-  ['connexion', 401, 'ERR_IDENTIFIANTS_INVALIDES', 1],
-  ['inscription', 400, 'ERR_INSCRIPTION_INVALIDE', 1],
-  ['inscription sans pseudo', 400, 'ERR_INSCRIPTION_INVALIDE', 1],
-  ['inscription', 409, 'ERR_COURRIEL_DEJA_UTILISE', 2],
-  ['connexion', 429, 'ERR_HTTP_429', 1],
-  ['inscription', 429, 'ERR_HTTP_429', 1],
-  ['connexion', 503, 'ERR_HTTP_503', 1],
-  ['inscription', 503, 'ERR_HTTP_503', 1],
+  ['connexion', 401, 'ERR_IDENTIFIANTS_INVALIDES', 1, false],
+  ['inscription', 400, 'ERR_INSCRIPTION_INVALIDE', 1, true],
+  ['inscription sans pseudo', 400, 'ERR_PSEUDO_MANQUANT', 0, false],
+  ['inscription sans pseudo', 409, 'ERR_PSEUDO_MANQUANT', 0, false],
+  ['inscription', 409, 'ERR_COURRIEL_DEJA_UTILISE', 2, true],
+  ['connexion', 429, 'ERR_HTTP_429', 1, false],
+  ['inscription', 429, 'ERR_HTTP_429', 1, true],
+  ['connexion', 503, 'ERR_HTTP_503', 1, false],
+  ['inscription', 503, 'ERR_HTTP_503', 1, true],
 ])(
   'affiche et retraduit l’erreur de %s (%i → %s, %i tentative(s))',
-  async (vue, statut, code, tentatives) => {
+  async (vue, statut, code, tentatives, avecPseudo) => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -51,7 +52,7 @@ it.each([
             inscrire: (identifiants) =>
               runtime.inscrire({
                 ...identifiants,
-                ...(vue === 'inscription' ? { pseudo: 'alice' } : {}),
+                ...(avecPseudo ? { pseudo: 'alice' } : {}),
               }),
           }}
           langue={langue}
@@ -98,7 +99,7 @@ it.each([
     ).toBe(false);
 
     expect(fetch).toHaveBeenCalledTimes(tentatives);
-    if (statut === 409) {
+    if (statut === 409 && avecPseudo) {
       const corps = vi
         .mocked(fetch)
         .mock.calls.map(([, options]) => JSON.parse(options?.body as string));
@@ -113,9 +114,5 @@ it.each([
     expect(screen.getByRole('status').textContent).toBe(
       t('en', `errors.${code}`)
     );
-    if (vue === 'inscription sans pseudo') {
-      const requete = vi.mocked(fetch).mock.calls[0][1];
-      expect(JSON.parse(requete?.body as string)).not.toHaveProperty('pseudo');
-    }
   }
 );
