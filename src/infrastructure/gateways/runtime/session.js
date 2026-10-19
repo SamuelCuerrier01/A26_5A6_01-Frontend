@@ -1,6 +1,10 @@
 'use strict';
 
-const { DELAI_RECONNEXION_INITIAL_MS } = require('./constantes');
+const {
+  DELAI_RECONNEXION_INITIAL_MS,
+  CHEMIN_CONNEXION,
+  CHEMIN_INSCRIPTION,
+} = require('./constantes');
 
 module.exports = {
   verifierGenerationSession(generation) {
@@ -93,7 +97,7 @@ module.exports = {
     this.generationSession += 1;
     this.renouvellementEnCours = null;
     const generation = this.generationSession;
-    const reponse = await this.appelHttp('/api/auth/login', {
+    const reponse = await this.appelHttp(CHEMIN_CONNEXION, {
       methode: 'POST',
       corps: { identifiant, mot_de_passe: motDePasse },
     });
@@ -102,6 +106,9 @@ module.exports = {
   },
 
   async inscrire({ courriel, motDePasse, pseudo }) {
+    if (typeof pseudo !== 'string' || pseudo.trim() === '') {
+      throw new Error('ERR_PSEUDO_MANQUANT');
+    }
     this.generationSession += 1;
     this.renouvellementEnCours = null;
     const generation = this.generationSession;
@@ -109,7 +116,7 @@ module.exports = {
     let pseudoTente = pseudo;
     for (let tentative = 0; tentative < TENTATIVES_MAX; tentative += 1) {
       try {
-        const reponse = await this.appelHttp('/api/auth/register', {
+        const reponse = await this.appelHttp(CHEMIN_INSCRIPTION, {
           methode: 'POST',
           corps: { pseudo: pseudoTente, courriel, mot_de_passe: motDePasse },
         });
