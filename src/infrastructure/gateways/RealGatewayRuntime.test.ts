@@ -2785,6 +2785,31 @@ describe('isolation et renouvellement des sessions', () => {
     expect(runtime.verificationSessionEnCours).toBe(false);
     runtime.fermerSocket();
   });
+  it.each([401, 503])(
+    'ne crée pas de socket si la validation du profil échoue après renouvellement (%s)',
+    async (statut) => {
+      const { runtime } = creerRuntime();
+      runtime.chargerSessionPersiste = () => ({
+        jeton: 'access-old',
+        refreshToken: 'refresh-old',
+      });
+      const creer = vi.spyOn(runtime, 'creerSocket');
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(reponseJson({}, 401))
+        .mockResolvedValueOnce(reponseJson(renouvellee))
+        .mockResolvedValueOnce(reponseJson({}, statut));
+      vi.stubGlobal('fetch', fetcher);
+      expect(await runtime.restaurerSession()).toBeNull();
+      expect(creer).not.toHaveBeenCalled();
+      expect(runtime.socket).toBeNull();
+      expect(runtime.jeton).toBeNull();
+      expect(runtime.refreshToken).toBeNull();
+      expect(runtime.utilisateurConnecte).toBeNull();
+      expect(runtime.indexMessages.size).toBe(0);
+      runtime.fermerSocket();
+    }
+  );
   it('restaure un accès expiré depuis une paire de jetons persistée', async () => {
     const { runtime } = creerRuntime();
     vi.spyOn(runtime, 'demarrerPollPresence').mockImplementation(() => {});

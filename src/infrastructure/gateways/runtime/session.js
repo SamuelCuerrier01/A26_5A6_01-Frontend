@@ -46,7 +46,7 @@ module.exports = {
         )
           throw new Error('ERR_RECONNEXION_REQUISE');
         this.memoriserJetons(reponse);
-        this.connecterSocket();
+        if (this.utilisateurConnecte) this.connecterSocket();
       })
       .catch(async (erreur) => {
         if (
