@@ -1,6 +1,6 @@
 {
   "name": "chatvardage",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "main": "main.js",
   "scripts": {
     "prestart": "node -e \"if (process.env.NODE_ENV !== 'development') { require('child_process').execSync('npm run build:login', { stdio: 'inherit' }); }\"",
@@ -13,14 +13,16 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --max-warnings=0",
+    "format:check": "prettier --check .",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,html,css,md,txt}\"",
     "dev": "npm run start:dev",
-    "build:win": "npm run build:login && npx --yes electron-builder@26.0.12 --win --publish never",
-    "build:mac": "npm run build:login && npx --yes electron-builder@26.0.12 --mac --publish never",
-    "build:linux": "npm run build:login && npx --yes electron-builder@26.0.12 --linux --publish never",
-    "build:all": "npm run build:login && npx --yes electron-builder@26.0.12 --win --mac --linux --publish never"
+    "build:win": "npm run build:login && electron-builder --win --publish never",
+    "build:mac": "npm run build:login && electron-builder --mac --publish never",
+    "build:linux": "npm run build:login && electron-builder --linux --publish never",
+    "build:all": "npm run build:login && electron-builder --win --mac --linux --publish never"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
@@ -29,7 +31,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "cross-env": "^7.0.3",
     "electron": "^44.0.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "26.15.3",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.0.0",
     "jsdom": "^29.1.1",

@@ -75,17 +75,6 @@ function waitForPort(port, timeoutMs = 30000) {
 
   return new Promise((resolve, reject) => {
     const tryConnect = () => {
-      // Vite se présente comme "localhost", que le système peut résoudre en
-      // IPv4 (127.0.0.1) OU IPv6 (::1) selon la configuration réseau locale
-      // — Node 17+ a changé l'ordre de résolution par défaut par rapport
-      // aux versions précédentes, et certaines installations Windows
-      // privilégient IPv6. Une seule tentative ciblant uniquement
-      // 127.0.0.1 peut donc échouer indéfiniment si Vite a fini par
-      // n'écouter que sur ::1, même si le serveur est parfaitement démarré
-      // et joignable via "localhost" (symptôme observé : "VITE ready" dans
-      // le terminal, mais "Vite n'a pas démarré..." après 30s ici). D'où
-      // les deux tentatives en parallèle ci-dessous — la première à
-      // réussir suffit.
       Promise.any([
         tenterConnexion('127.0.0.1', port),
         tenterConnexion('::1', port),

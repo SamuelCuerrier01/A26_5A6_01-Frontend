@@ -10,8 +10,6 @@
     <title>ChatVardage — Messages privés</title>
     <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="css/message-prive.css" />
-    <!-- Chargé AVANT le premier rendu : applique le thème mémorisé (voir
-         theme-browser.js), sinon flash du thème sombre à la navigation. -->
     <script src="javascript/theme-browser.js"></script>
   </head>
   <body>
@@ -35,9 +33,6 @@
         <span class="notif-dot notif-dot--rail" hidden></span>
       </button>
       <div class="rail-divider"></div>
-      <!-- Icônes des serveurs insérées ici par message-prive.js
-           (ChatUiShared.afficherRailServeurs) ; un clic ouvre ce serveur sur
-           la page des salons. -->
       <button
         id="open-create-channel-rail"
         class="server-icon server-icon--add"
@@ -87,8 +82,6 @@
         aria-label="Liste des conversations privées"
       ></ul>
       <div id="user-panel">
-        <!-- Photo (ou initiale) + pastille de présence : voir
-             ChatUiShared.afficherAvatarCourant. -->
         <div id="current-user-avatar" class="avatar user-avatar"></div>
         <div class="user-info">
           <div class="current-user-row">
@@ -249,8 +242,8 @@
               <span
                 class="notif-menu-option-desc"
                 data-i18n="notifications.previewDesc"
-                >Le texte du message apparaît dans la notification système,
-                même sur un écran verrouillé</span
+                >Le texte du message apparaît dans la notification système, même
+                sur un écran verrouillé</span
               >
             </span>
           </label>
@@ -263,34 +256,49 @@
         <div class="dm-user">
           <div class="avatar topbar-avatar"></div>
           <div>
-            <!-- Remplis par message-prive.js (afficherAucuneConversation /
-                 renderActiveConversation) : vides au départ pour ne pas
-                 afficher un faux état le temps du chargement. -->
             <div class="user-name"></div>
             <div class="user-status"></div>
           </div>
         </div>
-        <div
-          id="connection-status"
-          class="connection-status"
-          data-state="inconnu"
-          role="status"
-          aria-live="polite"
-        >
-          <span class="dot" aria-hidden="true"></span>
-          <span class="connection-text">
-            <span id="connection-label"></span>
-            <span id="connection-detail" class="connection-detail" hidden></span>
-          </span>
+        <div class="topbar-actions">
           <button
-            id="connection-retry"
-            class="connection-retry"
+            id="open-search"
+            class="network-test-button search-open"
             type="button"
-            data-i18n="network.retryNow"
-            hidden
+            title="Rechercher dans cette conversation"
+            aria-label="Rechercher dans cette conversation"
+            data-i18n-title="search.buttonTitle"
+            data-i18n-aria-label="search.buttonTitle"
           >
-            Réessayer
+            <span aria-hidden="true">⌕</span>
+            <span data-i18n="search.button">Rechercher</span>
           </button>
+          <div
+            id="connection-status"
+            class="connection-status"
+            data-state="inconnu"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="dot" aria-hidden="true"></span>
+            <span class="connection-text">
+              <span id="connection-label"></span>
+              <span
+                id="connection-detail"
+                class="connection-detail"
+                hidden
+              ></span>
+            </span>
+            <button
+              id="connection-retry"
+              class="connection-retry"
+              type="button"
+              data-i18n="network.retryNow"
+              hidden
+            >
+              Réessayer
+            </button>
+          </div>
         </div>
       </header>
 
@@ -348,6 +356,42 @@
       </form>
     </dialog>
 
+    <dialog id="search-dialog" class="search-dialog">
+      <div class="search-panel">
+        <div class="dialog-header">
+          <h2 class="search-title">Rechercher dans les messages</h2>
+          <button
+            type="button"
+            class="close-button search-close"
+            aria-label="Fermer"
+            data-i18n-aria-label="channels.close"
+          >
+            ×
+          </button>
+        </div>
+        <input
+          type="search"
+          class="search-input"
+          maxlength="100"
+          autocomplete="off"
+          placeholder="Texte à chercher…"
+          aria-label="Texte à chercher"
+          data-i18n-placeholder="search.placeholder"
+          data-i18n-aria-label="search.placeholder"
+        />
+        <p class="search-status" role="status" aria-live="polite"></p>
+        <ul class="search-results"></ul>
+        <button
+          type="button"
+          class="secondary-button full-width search-more"
+          hidden
+          data-i18n="search.more"
+        >
+          Plus de résultats
+        </button>
+      </div>
+    </dialog>
+
     <div id="toast" role="status" aria-live="polite"></div>
 
     <script src="javascript/notif-prefs.js"></script>
@@ -360,6 +404,7 @@
     <script src="javascript/messages-prives/affichage.js"></script>
     <script src="javascript/messages-prives/saisie.js"></script>
     <script src="javascript/messages-prives/rail.js"></script>
+    <script src="javascript/inactivite.js"></script>
     <script src="javascript/message-prive.js"></script>
   </body>
 </html>

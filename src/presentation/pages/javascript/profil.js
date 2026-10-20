@@ -1,13 +1,5 @@
 'use strict';
 
-// Page profil : vanilla JS chargée comme un <script> classique (même
-// contrainte que renderer.js/message-prive.js — nodeIntegration désactivé,
-// voir leur en-tête pour le détail complet), utilisant window.electronAPI /
-// window.I18n / window.ThemeManager exactement comme ces deux fichiers.
-// Pas de notif-prefs.js ici : cette page n'affiche aucun rond/badge de
-// notification ; le mode de notification y est modifié directement via
-// window.electronAPI.modifierPreferences (source de vérité : le serveur).
-
 const I18n =
   window.I18n ??
   (() => {
@@ -41,9 +33,6 @@ const ThemeManager =
     };
   })();
 
-// Aucun HTML construit sous forme de chaîne dans ce fichier (voir le même
-// principe et le même commentaire en tête de renderer.js) : uniquement
-// document.createElement/textContent, jamais innerHTML.
 function creerEl(tag, options = {}) {
   const { classe, texte, attrs, enfants } = options;
   const element = document.createElement(tag);
@@ -91,11 +80,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     logoutBtn: $('logout-btn'),
     logoutAllBtn: $('logout-all-btn'),
     logoutAllMessage: $('logout-all-message'),
+    logoutOthersBtn: $('logout-others-btn'),
+    logoutOthersMessage: $('logout-others-message'),
     toast: $('toast'),
   };
 
-  // Dernières valeurs enregistrées, pour savoir si un formulaire a des
-  // modifications (boutons "Enregistrer" désactivés sinon).
   let utilisateur = null;
   let preferences = null;
 
@@ -114,7 +103,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     element.dataset.kind = genre;
   }
 
-  /** Désactive le bouton pendant l'appel et affiche "Enregistrement…". */
   async function avecChargement(bouton, action) {
     const libelle = bouton.textContent;
     bouton.disabled = true;
@@ -128,15 +116,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // --- i18n / thème -----------------------------------------------------
-  // Même séquence qu'au démarrage de renderer.js/message-prive.js : langue
-  // courante d'abord (affecte tout t() appelé ensuite), puis thème (posé sur
-  // <html> avant le premier rendu visible).
   await I18n.initialiserDepuisElectronAPI(window.electronAPI);
   appliquerTraductionsStatiques();
   await ThemeManager.initialiserDepuisElectronAPI(window.electronAPI);
 
-  // --- En-tête (avatar + identité) --------------------------------------
+  if (window.Inactivite?.initialiserPageInactivite) {
+    void window.Inactivite.initialiserPageInactivite();
+  }
+
   function afficherEntete() {
     const pseudo = el.pseudoInput?.value.trim() || utilisateur?.pseudo || '';
     const alias = el.aliasInput?.value.trim() || '';
@@ -158,18 +145,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     if (el.avatarRemove) el.avatarRemove.hidden = !preferences?.avatar;
     if (el.handle) el.handle.textContent = pseudo ? `@${pseudo}` : '';
-    if (el.courrielAffiche) el.courrielAffiche.textContent = utilisateur?.courriel ?? '';
+    if (el.courrielAffiche)
+      el.courrielAffiche.textContent = utilisateur?.courriel ?? '';
     if (el.roleBadge) {
       const role = utilisateur?.role;
-      // Rôle global : seul l'admin a un badge (le modérateur n'existe que
-      // dans un serveur).
       const cle = role === 'admin' ? 'channels.roleAdmin' : null;
       el.roleBadge.hidden = !cle;
       el.roleBadge.textContent = cle ? t(cle) : '';
     }
   }
 
-  // --- Préférences (appliquées + enregistrées au clic) -------------------
   function cocher(nom, valeur) {
     document
       .querySelectorAll(`input[name="${nom}"]`)
@@ -185,7 +170,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       I18n.definirLangueActuelle(nouvelles.langue);
       appliquerTraductionsStatiques();
       afficherEntete();
-      // Boutons construits en JS (sans data-i18n) : à reconstruire.
       afficherBoutonSupprimer();
     }
     cocher('theme', nouvelles.theme);
@@ -197,8 +181,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll(`input[name="${nom}"]`).forEach((radio) => {
       radio.addEventListener('change', async () => {
         const precedentes = { ...preferences };
-        // Effet immédiat (aperçu), puis enregistrement serveur ; en cas
-        // d'échec on revient à la valeur précédente.
         afficherPreferences({ ...preferences, [nom]: radio.value });
         try {
           afficherPreferences(
@@ -213,9 +195,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Changement fait ailleurs (autre page, sélecteur rapide du dashboard) ou
-  // réponse du serveur : on se réaligne. L'alias n'est pas écrasé s'il est
-  // en cours d'édition.
   window.electronAPI.onPreferencesChange?.((nouvelles) => {
     const aliasModifie = aliasEnCoursDEdition();
     afficherPreferences(nouvelles);
@@ -225,21 +204,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // --- Photo de profil ----------------------------------------------------
-  // L'image est recadrée au carré et réduite à 256 px ICI, avant l'envoi :
-  // le serveur (User-Config-Service) la stocke telle quelle en data URL et
-  // refuse tout ce qui dépasse 90 000 caractères.
   const TAILLE_AVATAR_PX = 256;
-  const LONGUEUR_MAX_AVATAR = 88_000; // marge sous la limite serveur
+  const LONGUEUR_MAX_AVATAR = 88_000;
   const TAILLE_MAX_FICHIER = 10 * 1024 * 1024;
 
   async function redimensionnerAvatar(fichier) {
-    // createImageBitmap lit directement le File : ni FileReader ni URL blob:
-    // (que la CSP de la page n'autorise pas dans img-src).
     const bitmap = await createImageBitmap(fichier);
     const cote = Math.min(bitmap.width, bitmap.height);
     const canvas = creerEl('canvas', {
-      attrs: { width: String(TAILLE_AVATAR_PX), height: String(TAILLE_AVATAR_PX) },
+      attrs: {
+        width: String(TAILLE_AVATAR_PX),
+        height: String(TAILLE_AVATAR_PX),
+      },
     });
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
@@ -255,8 +231,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       TAILLE_AVATAR_PX
     );
     bitmap.close();
-    // Qualité décroissante jusqu'à tenir sous la limite (une photo de 256 px
-    // en WebP 0.85 fait en général 15-40 Ko, donc un seul essai suffit).
     for (const qualite of [0.85, 0.7, 0.5, 0.35]) {
       const donnees = canvas.toDataURL('image/webp', qualite);
       if (donnees.length <= LONGUEUR_MAX_AVATAR) return donnees;
@@ -267,7 +241,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   async function enregistrerAvatar(avatar, messageSucces) {
     if (el.avatarWrap) el.avatarWrap.dataset.loading = 'true';
     try {
-      afficherPreferences(await window.electronAPI.modifierPreferences({ avatar }));
+      afficherPreferences(
+        await window.electronAPI.modifierPreferences({ avatar })
+      );
       notifier(messageSucces);
     } catch (erreur) {
       notifier(messageErreur(erreur), true);
@@ -278,8 +254,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   el.avatarInput?.addEventListener('change', async () => {
     const fichier = el.avatarInput.files?.[0];
-    // Réinitialisé tout de suite : re-choisir le même fichier doit
-    // redéclencher 'change'.
     el.avatarInput.value = '';
     if (!fichier) return;
     if (fichier.size > TAILLE_MAX_FICHIER) {
@@ -300,10 +274,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     enregistrerAvatar('', t('profile.avatarRemoved'))
   );
 
-  // --- Présence (en ligne / hors ligne) --------------------------------
-  // Ne passe pas par les préférences : c'est un endpoint dédié
-  // (PUT /api/config-utilisateur/presence, voir modifierPresence), et le
-  // changement est poussé à toutes les pages via 'presence:change'.
   document.querySelectorAll('input[name="presence"]').forEach((radio) => {
     radio.addEventListener('change', async () => {
       const precedente = radio.value === 'en-ligne' ? 'hors-ligne' : 'en-ligne';
@@ -323,7 +293,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // --- Section Profil (pseudo + alias) -----------------------------------
   function aliasEnCoursDEdition() {
     return (el.aliasInput?.value.trim() ?? '') !== (preferences?.alias ?? '');
   }
@@ -332,7 +301,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bouton = el.identityForm?.querySelector('button[type="submit"]');
     if (!bouton || bouton.dataset.loading === 'true') return;
     const pseudo = el.pseudoInput.value.trim();
-    const change = pseudo !== (utilisateur?.pseudo ?? '') || aliasEnCoursDEdition();
+    const change =
+      pseudo !== (utilisateur?.pseudo ?? '') || aliasEnCoursDEdition();
     bouton.disabled = !change || !pseudo;
     afficherEntete();
   }
@@ -342,7 +312,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   el.identityForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const bouton = event.submitter ?? el.identityForm.querySelector('button[type="submit"]');
+    const bouton =
+      event.submitter ?? el.identityForm.querySelector('button[type="submit"]');
     const pseudo = el.pseudoInput.value.trim();
     const alias = el.aliasInput.value.trim();
     if (!pseudo) return;
@@ -354,8 +325,9 @@ window.addEventListener('DOMContentLoaded', async () => {
           el.pseudoInput.value = utilisateur.pseudo;
         }
         if (alias !== (preferences?.alias ?? '')) {
-          // Chaîne vide = effacer l'alias (voir configModifier).
-          const nouvelles = await window.electronAPI.modifierPreferences({ alias });
+          const nouvelles = await window.electronAPI.modifierPreferences({
+            alias,
+          });
           preferences = nouvelles;
           el.aliasInput.value = nouvelles.alias ?? '';
         }
@@ -367,22 +339,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     majEtatFormulaireIdentite();
   });
 
-  /** Formulaires qui demandent le mot de passe actuel (changement de mot de
-   * passe, suppression du compte) : un 401 y signifie que ce mot de passe a
-   * été refusé, pas une session expirée. */
   function messageErreurMotDePasse(erreur) {
     return String(erreur?.message ?? '').includes('ERR_HTTP_401')
       ? t('profile.currentPasswordIncorrect')
       : messageErreur(erreur);
   }
 
-  // --- Section Compte (mot de passe ; courriel affiché, non modifiable) -------
   function majEtatFormulaireCompte() {
     const bouton = el.accountForm?.querySelector('button[type="submit"]');
     if (!bouton || bouton.dataset.loading === 'true') return;
     const change = Boolean(el.newPasswordInput.value);
-    // Le mot de passe actuel n'est demandé qu'une fois une modification
-    // commencée (règle miroir du backend, voir profilModifierCompte).
     if (el.currentPasswordField) el.currentPasswordField.hidden = !change;
     bouton.disabled = !change || !el.currentPasswordInput.value;
   }
@@ -392,15 +358,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   el.accountForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const bouton = event.submitter ?? el.accountForm.querySelector('button[type="submit"]');
+    const bouton =
+      event.submitter ?? el.accountForm.querySelector('button[type="submit"]');
     const motDePasse = el.newPasswordInput.value;
     const motDePasseActuel = el.currentPasswordInput.value;
     if (!motDePasse) return;
     if (!motDePasseActuel) {
-      afficherMessageChamp(el.accountMessage, t('profile.currentPasswordRequiredHint'), 'error');
+      afficherMessageChamp(
+        el.accountMessage,
+        t('profile.currentPasswordRequiredHint'),
+        'error'
+      );
       return;
     }
-    // Jamais de courriel : il n'est pas modifiable depuis l'app.
     const donnees = { motDePasseActuel, motDePasse };
     try {
       utilisateur = await avecChargement(bouton, () =>
@@ -409,20 +379,22 @@ window.addEventListener('DOMContentLoaded', async () => {
       el.emailInput.value = utilisateur.courriel ?? '';
       el.newPasswordInput.value = '';
       el.currentPasswordInput.value = '';
-      afficherMessageChamp(el.accountMessage, t('profile.accountUpdated'), 'ok');
+      afficherMessageChamp(
+        el.accountMessage,
+        t('profile.accountUpdated'),
+        'ok'
+      );
       afficherEntete();
     } catch (erreur) {
-      afficherMessageChamp(el.accountMessage, messageErreurMotDePasse(erreur), 'error');
+      afficherMessageChamp(
+        el.accountMessage,
+        messageErreurMotDePasse(erreur),
+        'error'
+      );
     }
     majEtatFormulaireCompte();
   });
 
-  // --- Section Supprimer le compte -----------------------------------------
-  // Confirmation en deux temps (même pattern que le bouton supprimer d'un
-  // message, voir creerActionsMessage/afficherConfirmationSuppression dans
-  // chat-ui-shared.js, et le panneau "Paramètres du salon" de renderer.js) :
-  // pas de confirm() natif du navigateur, jamais utilisé ailleurs dans
-  // cette app.
   function afficherBoutonSupprimer() {
     if (!el.deleteActions) return;
     const bouton = creerEl('button', {
@@ -470,7 +442,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         oublierRailEnCache();
         await window.electronAPI.allerALaConnexion();
       } catch (erreur) {
-        afficherMessageChamp(el.deleteMessage, messageErreurMotDePasse(erreur), 'error');
+        afficherMessageChamp(
+          el.deleteMessage,
+          messageErreurMotDePasse(erreur),
+          'error'
+        );
         boutonAnnuler.disabled = false;
         boutonConfirmer.disabled = false;
       }
@@ -486,11 +462,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   afficherBoutonSupprimer();
 
-  // --- Navigation latérale entre sections --------------------------------
   const boutonsNav = [...document.querySelectorAll('.profile-nav button')];
   for (const bouton of boutonsNav) {
     bouton.addEventListener('click', () => {
-      $(bouton.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $(bouton.dataset.target)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
     });
   }
   if ('IntersectionObserver' in window) {
@@ -499,7 +477,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         const visible = entrees.find((entree) => entree.isIntersecting);
         if (!visible) return;
         for (const bouton of boutonsNav) {
-          bouton.classList.toggle('active', bouton.dataset.target === visible.target.id);
+          bouton.classList.toggle(
+            'active',
+            bouton.dataset.target === visible.target.id
+          );
         }
       },
       { root: $('profile-main'), rootMargin: '0px 0px -65% 0px' }
@@ -510,16 +491,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // --- Navigation ------------------------------------------------------
-  /** Rail des serveurs mémorisé pour l'affichage instantané des pages de
-   * chat (même clé que CLEF_RAIL_EN_CACHE dans chat-ui-shared.js, que cette
-   * page ne charge pas) : vidé en quittant le compte. */
   function oublierRailEnCache() {
     try {
       localStorage.removeItem('chatvardage:rail-serveurs');
-    } catch {
-      // Rien à oublier.
-    }
+    } catch {}
   }
 
   const allerAuTableauDeBord = () => window.electronAPI.navigate('index.html');
@@ -534,13 +509,32 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     await window.electronAPI.allerALaConnexion();
   });
+  el.logoutOthersBtn?.addEventListener('click', async () => {
+    afficherMessageChamp(el.logoutOthersMessage, '', 'ok');
+    el.logoutOthersBtn.disabled = true;
+    try {
+      await window.electronAPI.deconnexionAutres();
+      afficherMessageChamp(
+        el.logoutOthersMessage,
+        t('profile.logoutOthersDone'),
+        'ok'
+      );
+    } catch (erreur) {
+      afficherMessageChamp(
+        el.logoutOthersMessage,
+        messageErreur(erreur),
+        'error'
+      );
+    } finally {
+      el.logoutOthersBtn.disabled = false;
+    }
+  });
   el.logoutAllBtn?.addEventListener('click', async () => {
     afficherMessageChamp(el.logoutAllMessage, '', 'ok');
     el.logoutAllBtn.disabled = true;
     try {
       await window.electronAPI.deconnexionPartout();
     } catch (erreur) {
-      // Hors ligne ou Auth indisponible : la session reste ouverte ici.
       afficherMessageChamp(el.logoutAllMessage, messageErreur(erreur), 'error');
       el.logoutAllBtn.disabled = false;
       return;
@@ -549,11 +543,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     await window.electronAPI.allerALaConnexion();
   });
 
-  // --- Chargement des données existantes ---------------------------------
   const [resultatProfil, resultatPreferences] = await Promise.allSettled([
     window.electronAPI.profilObtenir(),
-    // Relit la config serveur (et non la copie de main.js) : c'est la page
-    // où l'utilisateur vérifie ce qui est réellement enregistré.
     window.electronAPI.configObtenir(),
   ]);
   if (resultatProfil.status === 'fulfilled') {
@@ -574,7 +565,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       avatar: config.avatar ?? null,
     });
   } else {
-    // Repli : la copie locale tenue par main.js.
     afficherPreferences(await window.electronAPI.obtenirPreferences());
     el.aliasInput.value = preferences?.alias ?? '';
     notifier(messageErreur(resultatPreferences.reason), true);
@@ -582,13 +572,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const presences = await window.electronAPI.obtenirPresences();
     cocher('presence', presences?.[utilisateur?.id] ?? 'en-ligne');
-  } catch {
-    // Présence inconnue : aucune option cochée plutôt qu'une fausse valeur.
-  }
+  } catch {}
   afficherEntete();
   majEtatFormulaireIdentite();
   majEtatFormulaireCompte();
-  // Données affichées : le contenu apparaît en fondu (voir
-  // ThemeManager.pagePrete dans theme-browser.js).
   ThemeManager.pagePrete?.();
 });

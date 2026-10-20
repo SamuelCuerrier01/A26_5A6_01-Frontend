@@ -1,13 +1,12 @@
 'use strict';
 
-// runtime/messages.js — Messages de salon et messages privés (Message-Service).
-// Méthodes de RealGatewayRuntime, ajoutées à son prototype (voir
-// RealGatewayRuntime.js) : `this` est l'instance.
-const { TAILLE_PAGE_MESSAGES, creerDmId } = require('./constantes');
+const {
+  TAILLE_PAGE_MESSAGES,
+  TAILLE_PAGE_RECHERCHE,
+  creerDmId,
+} = require('./constantes');
 
 module.exports = {
-  // --- Messages de salon (HTTP, voir Message-Service) --------------------------
-
   async envoyerMessage({ salonId, contenu }) {
     this.verifierReseauConnecte();
     const brut = await this.appelHttp(
@@ -19,7 +18,20 @@ module.exports = {
     return message;
   },
 
-  // --- Messages privés / DM (HTTP, voir Message-Service) ------------------------
+  async confirmerLivraisonDm(brut) {
+    if (
+      !brut.id ||
+      brut.recipientId !== this.utilisateurConnecte?.id ||
+      brut.deliveredAt
+    )
+      return;
+    try {
+      await this.appelHttp(
+        `/api/messages/${encodeURIComponent(brut.id)}/delivered`,
+        { methode: 'PUT' }
+      );
+    } catch {}
+  },
 
   mapperMessageDm(brut) {
     const cree = new Date(brut.createdAt).getTime();
@@ -30,6 +42,9 @@ module.exports = {
       auteurId: brut.senderId,
       contenu: brut.content,
       envoi: cree,
+      ...(brut.deliveredAt
+        ? { livraison: new Date(brut.deliveredAt).getTime() }
+        : {}),
       ...(modifie !== cree ? { modification: modifie } : {}),
     };
   },
@@ -42,30 +57,39 @@ module.exports = {
 
   async obtenirMessagesPriveesAvantParUtilisateur(
     autreUtilisateurId,
-    { avantId, taille } = {}
+    { avantId, autourId, apresId, taille } = {}
   ) {
     const limite = taille || TAILLE_PAGE_MESSAGES;
     const params = new URLSearchParams({ limit: String(limite) });
     if (avantId) params.set('cursor', avantId);
+    if (autourId) params.set('around', autourId);
+    if (apresId) {
+      params.set('cursor', apresId);
+      params.set('direction', 'after');
+    }
     const bruts = await this.appelHttp(
       `/api/messages/history/${encodeURIComponent(autreUtilisateurId)}?${params.toString()}`
     );
+    for (const brut of bruts) void this.confirmerLivraisonDm(brut);
     const messages = bruts.map((m) => this.mapperMessageDm(m));
     messages.forEach((m) => this.indexMessages.set(m.id, { type: 'dm' }));
     return { messages, finHistorique: bruts.length < limite };
   },
 
-  async obtenirMessagesPriveesAvant({ conversationId, avantId, taille }) {
+  async obtenirMessagesPriveesAvant({
+    conversationId,
+    avantId,
+    autourId,
+    apresId,
+    taille,
+  }) {
     return this.obtenirMessagesPriveesAvantParUtilisateur(
       this.autreParticipantDm(conversationId),
-      { avantId, taille }
+      { avantId, autourId, apresId, taille }
     );
   },
 
   async construireConversationPrivee(autreUtilisateurId, dernierMessageConnu) {
-    // Historique illisible (panne passagère) : la conversation reste
-    // listée avec son dernier message connu, son historique sera chargé
-    // à l'ouverture (finHistorique false) au lieu de disparaître.
     const { messages, finHistorique } =
       await this.obtenirMessagesPriveesAvantParUtilisateur(
         autreUtilisateurId
@@ -81,7 +105,6 @@ module.exports = {
       otherUser: {
         id: autreUtilisateurId,
         pseudo: autre?.pseudo ?? autreUtilisateurId,
-        // Pseudo pas encore résolu (panne passagère) : la page redemandera.
         pseudoInconnu: !autre,
         present: this.presences[autreUtilisateurId] === 'en-ligne',
         alias: this.profilsPublics.get(autreUtilisateurId)?.alias ?? null,
@@ -93,17 +116,7 @@ module.exports = {
     };
   },
 
-  /**
-   * Liste les conversations privées de l'utilisateur courant. Combine
-   * `GET /api/messages/conversations` (source principale, voir
-   * Message-Service) et les partenaires connus localement cette session
-   * (`partenairesDmConnus` : conversation tout juste démarrée, avant tout
-   * message). Lève une erreur si la liste du serveur est illisible.
-   */
   async obtenirConversationsPrivees() {
-    // Échec remonté à la page (qui garde sa liste et réessaie) : une liste
-    // vide ou partielle affichée sans rien dire faisait croire à l'absence
-    // de conversations.
     const resume = await this.appelHttp('/api/messages/conversations');
     const partenaireIds = new Map();
     for (const item of resume) {
@@ -123,26 +136,6 @@ module.exports = {
     );
   },
 
-  /**
-   * Version légère de obtenirConversationsPrivees, pour les pastilles « non
-   * lu » : seulement l'id de chaque conversation et son dernier message, en
-   * UN appel (`GET /api/messages/conversations`), sans recharger
-   * l'historique de chaque interlocuteur.
-   */
-  async obtenirResumesConversationsPrivees() {
-    if (!this.utilisateurConnecte) return [];
-    const resume = await this.appelHttp('/api/messages/conversations');
-    return (resume ?? []).map((item) => {
-      this.partenairesDmConnus.add(item.otherUserId);
-      const dernier = this.mapperMessageDm(item.lastMessage);
-      this.indexMessages.set(dernier.id, { type: 'dm' });
-      return {
-        id: creerDmId(this.utilisateurConnecte.id, item.otherUserId),
-        lastMessage: dernier,
-      };
-    });
-  },
-
   async demarrerConversationPrivee({ autreUtilisateurId }) {
     this.partenairesDmConnus.add(autreUtilisateurId);
     return this.construireConversationPrivee(autreUtilisateurId);
@@ -160,10 +153,6 @@ module.exports = {
     this.partenairesDmConnus.add(autreUtilisateurId);
     return message;
   },
-
-  // --- Modification/suppression de message (salon OU DM) -----------------------
-  // Routées via l'index local (voir this.indexMessages) : le renderer appelle
-  // un seul canal IPC générique pour les deux types (voir chat-ui-shared.js).
 
   async modifierMessage({ messageId, contenu }) {
     this.verifierReseauConnecte();
@@ -199,5 +188,156 @@ module.exports = {
     }
     this.indexMessages.delete(messageId);
     return { messageId };
+  },
+
+  versConversationLocale(idServeur) {
+    const [genre, cible] = String(idServeur).split(':');
+    if (!cible) return null;
+    if (genre === 'room') return { type: 'salon', conversationId: cible };
+    if (genre === 'dm') {
+      return {
+        type: 'prive',
+        conversationId: creerDmId(this.utilisateurConnecte.id, cible),
+      };
+    }
+    return null;
+  },
+
+  async obtenirNonLus() {
+    const nonLus = { salons: {}, prives: {} };
+    if (!this.utilisateurConnecte) return nonLus;
+    const { counts } = (await this.appelHttp('/api/messages/unread')) ?? {};
+    for (const [idServeur, nombre] of Object.entries(counts ?? {})) {
+      const locale = this.versConversationLocale(idServeur);
+      if (!locale || !(nombre > 0)) continue;
+      const cible = locale.type === 'salon' ? nonLus.salons : nonLus.prives;
+      cible[locale.conversationId] = nombre;
+    }
+    return nonLus;
+  },
+
+  async marquerConversationLue({ type, conversationId, messageId }) {
+    if (!messageId) throw new Error('ERR_MESSAGE_INTROUVABLE');
+    const chemin =
+      type === 'salon'
+        ? `/api/messages/rooms/${encodeURIComponent(conversationId)}/read`
+        : `/api/messages/conversations/${encodeURIComponent(this.autreParticipantDm(conversationId))}/read`;
+    const etat = await this.appelHttp(chemin, {
+      methode: 'PUT',
+      corps: { messageId },
+    });
+    return { nonLus: etat?.unreadCount ?? 0 };
+  },
+
+  async rechercherMessages({ texte, curseur, type, conversationId }) {
+    const params = new URLSearchParams({
+      q: texte,
+      limit: String(TAILLE_PAGE_RECHERCHE),
+      conversationId:
+        type === 'salon'
+          ? `room:${conversationId}`
+          : `dm:${this.autreParticipantDm(conversationId)}`,
+    });
+    if (curseur) params.set('cursor', curseur);
+    const page = await this.appelHttp(
+      `/api/messages/search?${params.toString()}`
+    );
+    const moi = this.utilisateurConnecte?.id;
+    const bruts = page?.results ?? [];
+    await this.resoudrePseudos(
+      bruts
+        .map(({ message }) => message.authorId ?? message.senderId)
+        .filter((id) => id && id !== moi)
+    );
+    const nom = (id) =>
+      this.profilsPublics.get(id)?.alias ??
+      this.utilisateursConnus.get(id)?.pseudo ??
+      (id === moi ? this.utilisateurConnecte.pseudo : null);
+    const resultats = bruts.map(({ kind, message }) => {
+      const mappe =
+        kind === 'room'
+          ? this.mapperMessageSalon(message)
+          : this.mapperMessageDm(message);
+      this.indexMessages.set(
+        mappe.id,
+        kind === 'room'
+          ? { type: 'salon', roomId: message.roomId }
+          : { type: 'dm' }
+      );
+      return {
+        type: kind === 'room' ? 'salon' : 'prive',
+        conversationId: kind === 'room' ? message.roomId : mappe.conversationId,
+        auteurNom: nom(mappe.auteurId),
+        message: mappe,
+      };
+    });
+    return { resultats, curseurSuivant: page?.nextCursor ?? null };
+  },
+
+  nomLecteur(id) {
+    return (
+      this.profilsPublics.get(id)?.alias ??
+      this.utilisateursConnus.get(id)?.pseudo ??
+      null
+    );
+  },
+
+  async obtenirLectures({ type, conversationId }) {
+    const bruts =
+      type === 'salon'
+        ? ((
+            await this.appelHttp(
+              `/api/messages/rooms/${encodeURIComponent(conversationId)}/read-states`
+            )
+          )?.lecteurs ?? [])
+        : [
+            await this.appelHttp(
+              `/api/messages/conversations/${encodeURIComponent(this.autreParticipantDm(conversationId))}/read-state`
+            ),
+          ].filter(Boolean);
+    await this.resoudrePseudos(bruts.map((brut) => brut.userId));
+    return {
+      lecteurs: bruts.map((brut) => ({
+        utilisateurId: brut.userId,
+        nom: this.nomLecteur(brut.userId),
+        luJusqua: brut.lastReadAt ? new Date(brut.lastReadAt).getTime() : null,
+        dernierMessageLuId: brut.lastReadMessageId ?? null,
+      })),
+    };
+  },
+
+  async traiterLectureEntrante(evt) {
+    const moi = this.utilisateurConnecte?.id;
+    if (
+      !moi ||
+      typeof evt?.userId !== 'string' ||
+      typeof evt.targetId !== 'string' ||
+      typeof evt.lastReadAt !== 'string'
+    ) {
+      return;
+    }
+    const luJusqua = Date.parse(evt.lastReadAt);
+    if (!Number.isFinite(luJusqua)) return;
+    const deMoi = evt.userId === moi;
+    let lecture;
+    if (evt.kind === 'room') {
+      lecture = { type: 'salon', conversationId: evt.targetId };
+    } else if (evt.kind === 'dm' && (deMoi || evt.targetId === moi)) {
+      lecture = {
+        type: 'prive',
+        conversationId: creerDmId(moi, deMoi ? evt.targetId : evt.userId),
+      };
+    } else {
+      return;
+    }
+    if (!deMoi) await this.resoudrePseudos([evt.userId]);
+    this.emettre('lecture', {
+      ...lecture,
+      utilisateurId: evt.userId,
+      nom: this.nomLecteur(evt.userId),
+      luJusqua,
+      dernierMessageLuId: evt.lastReadMessageId ?? null,
+      deMoi,
+    });
   },
 };

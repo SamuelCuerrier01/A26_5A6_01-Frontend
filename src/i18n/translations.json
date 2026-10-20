@@ -41,7 +41,11 @@
       "register": "Créer le compte",
       "registering": "Création du compte…",
       "defaultPseudoHint": "Un pseudo par défaut vous sera attribué ; vous pourrez le changer plus tard dans votre profil.",
-      "sessionExpired": "Ta session a expiré. Reconnecte-toi pour continuer."
+      "sessionExpired": "Ta session a expiré. Reconnecte-toi pour continuer.",
+      "sessionInactive": "Ta session a été fermée automatiquement après 30 minutes d'inactivité. Confirme pour revenir à l'écran de connexion.",
+      "sessionReturnTitle": "Session terminée",
+      "sessionInactiveDismissHint": "Tu peux aussi confirmer en cliquant à l'extérieur.",
+      "sessionInactiveConfirm": "Confirmer"
     },
     "nav": {
       "servers": "Serveurs",
@@ -113,6 +117,7 @@
       "hiddenPreview": "Nouveau message reçu"
     },
     "dm": {
+      "showMoreConversations": "Voir plus de conversations",
       "title": "Messages privés",
       "filterAll": "Tous",
       "filterOnline": "En ligne",
@@ -147,7 +152,8 @@
     "history": {
       "loadOlder": "Charger les messages plus anciens",
       "loading": "Chargement des messages…",
-      "endOfHistory": "Fin de l'historique"
+      "endOfHistory": "Fin de l'historique",
+      "loadNewer": "Charger les messages plus récents"
     },
     "errors": {
       "generic": "Une erreur est survenue.",
@@ -171,9 +177,12 @@
       "ERR_AUCUN_UTILISATEUR_CONNECTE": "Aucun utilisateur connecté.",
       "ERR_MESSAGE_TROP_LONG": "Le message dépasse la limite de 2000 caractères.",
       "ERR_IDENTIFIANTS_INVALIDES": "Pseudo, courriel ou mot de passe incorrect.",
+      "ERR_INSCRIPTION_INVALIDE": "Le serveur a refusé la demande de création de compte.",
+      "ERR_PSEUDO_MANQUANT": "Impossible de créer le compte : aucun pseudo n’a été fourni.",
       "ERR_COURRIEL_DEJA_UTILISE": "Ce courriel est déjà associé à un compte.",
       "ERR_SESSION_FERMEE": "La session a été fermée. Reconnecte-toi.",
       "ERR_RESEAU_INDISPONIBLE": "Impossible de joindre le serveur pour le moment. Réessayez plus tard.",
+      "ERR_HTTP_400": "Requête invalide.",
       "ERR_HTTP_409": "Ce pseudo est déjà pris, choisissez-en un autre.",
       "ERR_HTTP_429": "Trop de messages ou de tentatives en peu de temps. Patiente quelques secondes, puis réessaie.",
       "ERR_HTTP_500": "Le serveur ne répond pas pour le moment. Réessaie dans quelques instants.",
@@ -281,6 +290,9 @@
       "accountSectionHint": "Change ton mot de passe. Le courriel ne peut pas être modifié.",
       "logoutAll": "Se déconnecter partout",
       "logoutAllHint": "Ferme ta session sur tous tes appareils, celui-ci compris (appareil perdu ou prêté).",
+      "logoutOthers": "Déconnecter les autres appareils",
+      "logoutOthersHint": "Ferme ta session sur tous tes autres appareils ; celui-ci reste connecté.",
+      "logoutOthersDone": "Les autres appareils ont été déconnectés.",
       "emailReadonlyHint": "Le courriel ne peut pas être modifié.",
       "currentPasswordIncorrect": "Mot de passe actuel incorrect."
     },
@@ -294,6 +306,8 @@
       "discoverTitle": "Rejoindre un serveur public",
       "searchPlaceholder": "Rechercher un serveur…",
       "noPublic": "Aucun serveur public à rejoindre.",
+      "showMorePublic": "Afficher plus de serveurs",
+      "showMoreRail": "Voir plus de serveurs",
       "join": "Rejoindre",
       "joined": "Serveur rejoint.",
       "memberCount": "{n} membre(s)",
@@ -308,6 +322,10 @@
       "roleUpdated": "Rôle mis à jour.",
       "kick": "Expulser",
       "kicked": "Membre expulsé.",
+      "transferTitle": "Expulser {name}, propriétaire du serveur",
+      "transferHint": "Choisissez le membre qui deviendra propriétaire. L’ancien propriétaire perd l’accès au serveur et à ses messages. Seuls les membres affichés sont proposés.",
+      "makeOwner": "Nommer propriétaire et expulser",
+      "noOtherMember": "Aucun autre membre ne peut reprendre ce serveur : supprimez-le plutôt.",
       "updated": "Serveur mis à jour.",
       "leave": "Quitter le serveur",
       "leaveConfirm": "Quitter ce serveur ?",
@@ -325,6 +343,37 @@
       "minimize": "Réduire",
       "maximize": "Agrandir",
       "restore": "Restaurer",
+      "close": "Fermer"
+    },
+    "search": {
+      "button": "Rechercher",
+      "buttonTitle": "Rechercher dans cette conversation",
+      "title": "Rechercher dans les messages",
+      "titleIn": "Rechercher dans {name}",
+      "placeholder": "Texte à chercher…",
+      "prompt": "Tape au moins 2 caractères pour chercher dans cette conversation.",
+      "noConversation": "Ouvre un salon ou une conversation pour y chercher.",
+      "searching": "Recherche…",
+      "noResults": "Aucun message trouvé.",
+      "more": "Plus de résultats",
+      "messageNotFound": "Ce message n'est plus dans l'historique (supprimé ou trop ancien)."
+    },
+    "readReceipts": {
+      "newMessages": "Nouveaux messages",
+      "delivered": "Livré, non lu",
+      "read": "Lu",
+      "seenBy": "Vu par {names}",
+      "seenByOneMore": "Vu par {names} et 1 autre",
+      "seenByMore": "Vu par {names} et {count} autres",
+      "sent": "Envoyé, non lu"
+    },
+    "userCard": {
+      "title": "Profil",
+      "view": "Voir le profil de {name}",
+      "alias": "Alias",
+      "pseudo": "Pseudo",
+      "noAlias": "Aucun alias",
+      "message": "Message privé",
       "close": "Fermer"
     }
   },
@@ -370,7 +419,11 @@
       "register": "Create account",
       "registering": "Creating account…",
       "defaultPseudoHint": "A default username will be assigned to you; you can change it later in your profile.",
-      "sessionExpired": "Your session has expired. Please sign in again."
+      "sessionExpired": "Your session has expired. Please sign in again.",
+      "sessionInactive": "Your session was closed automatically after 30 minutes of inactivity. Confirm to return to the sign-in screen.",
+      "sessionReturnTitle": "Session ended",
+      "sessionInactiveDismissHint": "You can also confirm by clicking outside.",
+      "sessionInactiveConfirm": "Confirm"
     },
     "nav": {
       "servers": "Servers",
@@ -442,6 +495,7 @@
       "hiddenPreview": "New message received"
     },
     "dm": {
+      "showMoreConversations": "See more conversations",
       "title": "Direct Messages",
       "filterAll": "All",
       "filterOnline": "Online",
@@ -476,7 +530,8 @@
     "history": {
       "loadOlder": "Load older messages",
       "loading": "Loading messages…",
-      "endOfHistory": "End of history"
+      "endOfHistory": "End of history",
+      "loadNewer": "Load newer messages"
     },
     "errors": {
       "generic": "An error occurred.",
@@ -500,9 +555,12 @@
       "ERR_AUCUN_UTILISATEUR_CONNECTE": "No user is currently signed in.",
       "ERR_MESSAGE_TROP_LONG": "The message exceeds the 2000-character limit.",
       "ERR_IDENTIFIANTS_INVALIDES": "Incorrect username, email or password.",
+      "ERR_INSCRIPTION_INVALIDE": "The server rejected the account creation request.",
+      "ERR_PSEUDO_MANQUANT": "Unable to create the account: no username was provided.",
       "ERR_COURRIEL_DEJA_UTILISE": "This email is already associated with an account.",
       "ERR_SESSION_FERMEE": "The session was closed. Please log in again.",
       "ERR_RESEAU_INDISPONIBLE": "Couldn't reach the server right now. Please try again later.",
+      "ERR_HTTP_400": "Invalid request.",
       "ERR_HTTP_409": "This username is already taken, choose another one.",
       "ERR_HTTP_429": "Too many messages or attempts in a short time. Wait a few seconds, then try again.",
       "ERR_HTTP_500": "The server isn't responding right now. Try again in a moment.",
@@ -610,6 +668,9 @@
       "accountSectionHint": "Change your password. The email address cannot be changed.",
       "logoutAll": "Log out everywhere",
       "logoutAllHint": "Ends your session on all your devices, this one included (lost or lent device).",
+      "logoutOthers": "Sign out other devices",
+      "logoutOthersHint": "Ends your session on all your other devices; this one stays signed in.",
+      "logoutOthersDone": "Your other devices have been signed out.",
       "emailReadonlyHint": "The email address cannot be changed.",
       "currentPasswordIncorrect": "Current password is incorrect."
     },
@@ -623,6 +684,8 @@
       "discoverTitle": "Join a public server",
       "searchPlaceholder": "Search a server…",
       "noPublic": "No public server to join.",
+      "showMorePublic": "Show more servers",
+      "showMoreRail": "See more servers",
       "join": "Join",
       "joined": "Server joined.",
       "memberCount": "{n} member(s)",
@@ -637,6 +700,10 @@
       "roleUpdated": "Role updated.",
       "kick": "Kick",
       "kicked": "Member kicked.",
+      "transferTitle": "Kick {name}, the server owner",
+      "transferHint": "Choose the member who will become the owner. The former owner loses access to the server and its messages. Only the members shown are offered.",
+      "makeOwner": "Make owner and kick",
+      "noOtherMember": "No other member can take over this server: delete it instead.",
       "updated": "Server updated.",
       "leave": "Leave server",
       "leaveConfirm": "Leave this server?",
@@ -654,6 +721,37 @@
       "minimize": "Minimize",
       "maximize": "Maximize",
       "restore": "Restore",
+      "close": "Close"
+    },
+    "search": {
+      "button": "Search",
+      "buttonTitle": "Search this conversation",
+      "title": "Search messages",
+      "titleIn": "Search in {name}",
+      "placeholder": "Text to search…",
+      "prompt": "Type at least 2 characters to search this conversation.",
+      "noConversation": "Open a channel or a conversation to search it.",
+      "searching": "Searching…",
+      "noResults": "No messages found.",
+      "more": "More results",
+      "messageNotFound": "This message is no longer in the history (deleted or too old)."
+    },
+    "readReceipts": {
+      "newMessages": "New messages",
+      "delivered": "Delivered, unread",
+      "read": "Read",
+      "seenBy": "Seen by {names}",
+      "seenByOneMore": "Seen by {names} and 1 other",
+      "seenByMore": "Seen by {names} and {count} others",
+      "sent": "Sent, unread"
+    },
+    "userCard": {
+      "title": "Profile",
+      "view": "View {name}'s profile",
+      "alias": "Alias",
+      "pseudo": "Username",
+      "noAlias": "No alias",
+      "message": "Direct message",
       "close": "Close"
     }
   }

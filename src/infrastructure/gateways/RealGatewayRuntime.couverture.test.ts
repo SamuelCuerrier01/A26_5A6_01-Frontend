@@ -10,18 +10,12 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-// Module CommonJS sans déclaration de types (voir son en-tête) : un import
-// par ligne, pour que chaque @ts-expect-error vise bien sa ligne.
-// @ts-expect-error -- pas de déclaration de types
+// @ts-expect-error -- module CommonJS sans déclaration de types
 import { RealGatewayRuntime } from './RealGatewayRuntime.js';
-// @ts-expect-error -- pas de déclaration de types
-import { chargerJetonPersiste } from './RealGatewayRuntime.js';
-// @ts-expect-error -- pas de déclaration de types
-import { sauvegarderJetonPersiste } from './RealGatewayRuntime.js';
-
-// Compléments de RealGatewayRuntime.test.ts : chemins moins fréquents
-// (erreurs, repli, événements temps réel, persistance du jeton), pour que
-// ce fichier — le vrai client réseau de l'app — reste couvert à 100 %.
+// @ts-expect-error -- module CommonJS sans déclaration de types
+import { chargerSessionPersiste } from './RealGatewayRuntime.js';
+// @ts-expect-error -- module CommonJS sans déclaration de types
+import { sauvegarderSessionPersiste } from './RealGatewayRuntime.js';
 
 function reponseJson(corps: unknown, statut = 200) {
   return {
@@ -59,8 +53,8 @@ function creerRuntime() {
       baseUrlSocket: 'http://gateway.test',
     },
     {
-      chargerJetonPersiste: vi.fn(() => null),
-      sauvegarderJetonPersiste: vi.fn(),
+      chargerSessionPersiste: vi.fn(() => null),
+      sauvegarderSessionPersiste: vi.fn(),
       creerSocket: vi.fn(() => {
         const nouveau = creerFauxSocket();
         sockets.push(nouveau);
@@ -71,7 +65,6 @@ function creerRuntime() {
   return { runtime, sockets, socket: () => sockets[sockets.length - 1] };
 }
 
-/** Runtime avec une session ouverte (utilisateur `moi`), sans réseau. */
 function runtimeConnecte() {
   const outils = creerRuntime();
   outils.runtime.jeton = 'jwt';
@@ -104,8 +97,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
   });
 
   describe('persistance du jeton sur disque', () => {
-    // Même cache de modules que le require('electron') de
-    // RealGatewayRuntime.js (résolu depuis la racine du projet).
     const requireLocal = createRequire(
       path.join(process.cwd(), 'package.json')
     );
@@ -113,7 +104,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
     let dossier: string;
     let ancien: NodeJS.Module | undefined;
 
-    /** Faux `safeStorage` : « chiffre » en inversant la chaîne. */
     const coffre = (disponible = true) => ({
       isEncryptionAvailable: vi.fn(() => disponible),
       encryptString: vi.fn((texte: string) =>
@@ -146,26 +136,92 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
     it('chiffre le jeton : jamais en clair dans le fichier', () => {
       simulerElectron(coffre());
-      sauvegarderJetonPersiste('jwt-secret');
+      sauvegarderSessionPersiste({ jeton: 'jwt-secret', refreshToken: null });
       const contenu = readFileSync(fichier(), 'utf8');
       expect(contenu).not.toContain('jwt-secret');
       expect(lire()).toEqual({
-        jetonChiffre: Buffer.from('terces-twj').toString('base64'),
+        sessionChiffree: Buffer.from(
+          JSON.stringify({ jeton: 'jwt-secret', refreshToken: null })
+            .split('')
+            .reverse()
+            .join('')
+        ).toString('base64'),
       });
-      expect(chargerJetonPersiste()).toBe('jwt-secret');
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'jwt-secret',
+        refreshToken: null,
+      });
       if (process.platform !== 'win32') {
         expect(statSync(fichier()).mode & 0o777).toBe(0o600);
       }
     });
 
-    it('sans chiffrement disponible : repli en clair, efface à la déconnexion', () => {
-      expect(chargerJetonPersiste()).toBeNull();
+    it('chiffre aussi le jeton de renouvellement et refuse une session déchiffrée invalide', () => {
+      simulerElectron(coffre());
+      const session = {
+        jeton: 'access-secret',
+        refreshToken: 'refresh-secret',
+      };
+      sauvegarderSessionPersiste(session);
+      expect(chargerSessionPersiste()).toEqual(session);
+      expect(readFileSync(fichier(), 'utf8')).not.toContain('refresh-secret');
+      for (const invalid of [
+        null,
+        {},
+        { jeton: 4 },
+        { jeton: '' },
+        { jeton: 'jwt', refreshToken: 4 },
+      ]) {
+        const fake = coffre();
+        fake.decryptString.mockReturnValue(JSON.stringify(invalid));
+        simulerElectron(fake);
+        expect(chargerSessionPersiste()).toBeNull();
+      }
+    });
+
+    it('migre un ancien accès chiffré sans inventer un renouvellement', () => {
+      simulerElectron(coffre());
+      writeFileSync(
+        fichier(),
+        JSON.stringify({
+          jetonChiffre: Buffer.from('ycagel').toString('base64'),
+        })
+      );
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'legacy',
+        refreshToken: null,
+      });
+      expect(lire()).toHaveProperty('sessionChiffree');
+    });
+
+    it('sans chiffrement disponible : aucune persistance', () => {
+      expect(chargerSessionPersiste()).toBeNull();
       simulerElectron(coffre(false));
-      sauvegarderJetonPersiste('jwt-1');
-      expect(lire()).toEqual({ jeton: 'jwt-1' });
-      expect(chargerJetonPersiste()).toBe('jwt-1');
-      sauvegarderJetonPersiste(null);
+      sauvegarderSessionPersiste({ jeton: 'jwt-1', refreshToken: null });
       expect(existsSync(fichier())).toBe(false);
+      writeFileSync(fichier(), JSON.stringify({ jeton: 'ancien-jwt' }));
+      expect(chargerSessionPersiste()).toBeNull();
+      expect(existsSync(fichier())).toBe(false);
+      sauvegarderSessionPersiste(null);
+      expect(existsSync(fichier())).toBe(false);
+    });
+
+    it('refuse le coffre Linux basic_text', () => {
+      simulerElectron({
+        ...coffre(),
+        getSelectedStorageBackend: () => 'basic_text',
+      });
+      sauvegarderSessionPersiste({ jeton: 'secret', refreshToken: null });
+      expect(existsSync(fichier())).toBe(false);
+      simulerElectron({
+        ...coffre(),
+        getSelectedStorageBackend: () => 'gnome_libsecret',
+      });
+      sauvegarderSessionPersiste({ jeton: 'secret', refreshToken: null });
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'secret',
+        refreshToken: null,
+      });
     });
 
     it('migre un ancien jeton en clair vers le format chiffré', () => {
@@ -173,8 +229,11 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         mode: 0o644,
       });
       simulerElectron(coffre());
-      expect(chargerJetonPersiste()).toBe('ancien-jwt');
-      expect(lire()).toHaveProperty('jetonChiffre');
+      expect(chargerSessionPersiste()).toEqual({
+        jeton: 'ancien-jwt',
+        refreshToken: null,
+      });
+      expect(lire()).toHaveProperty('sessionChiffree');
       expect(readFileSync(fichier(), 'utf8')).not.toContain('ancien-jwt');
       if (process.platform !== 'win32') {
         expect(statSync(fichier()).mode & 0o777).toBe(0o600);
@@ -183,30 +242,29 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
     it('jeton chiffré illisible : reconnexion demandée (null)', () => {
       writeFileSync(fichier(), JSON.stringify({ jetonChiffre: 'AAAA' }));
-      // Trousseau indisponible (autre session, keyring absent…).
       simulerElectron(coffre(false));
-      expect(chargerJetonPersiste()).toBeNull();
-      // Déchiffrement en erreur (trousseau changé).
+      expect(chargerSessionPersiste()).toBeNull();
       const enErreur = coffre();
       enErreur.decryptString.mockImplementation(() => {
         throw new Error('clé inconnue');
       });
       simulerElectron(enErreur);
-      expect(chargerJetonPersiste()).toBeNull();
-      // Déchiffré, mais vide.
+      writeFileSync(fichier(), JSON.stringify({ jetonChiffre: 'AAAA' }));
+      expect(chargerSessionPersiste()).toBeNull();
       const vide = coffre();
       vide.decryptString.mockReturnValue('');
       simulerElectron(vide);
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
     });
 
     it('ignore un fichier sans jeton exploitable', () => {
+      simulerElectron(coffre());
       writeFileSync(fichier(), JSON.stringify({ jeton: '' }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       writeFileSync(fichier(), JSON.stringify({ jeton: 42 }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
       writeFileSync(fichier(), JSON.stringify({ jetonChiffre: '' }));
-      expect(chargerJetonPersiste()).toBeNull();
+      expect(chargerSessionPersiste()).toBeNull();
     });
 
     it("journalise une écriture impossible sans lever d'erreur", () => {
@@ -214,9 +272,12 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       requireLocal.cache[cheminElectron] = {
         exports: {
           app: { getPath: () => path.join(dossier, 'inexistant', 'profond') },
+          safeStorage: coffre(),
         },
       } as unknown as NodeJS.Module;
-      expect(() => sauvegarderJetonPersiste('jwt')).not.toThrow();
+      expect(() =>
+        sauvegarderSessionPersiste({ jeton: 'jwt', refreshToken: null })
+      ).not.toThrow();
       expect(journal).toHaveBeenCalled();
     });
 
@@ -225,8 +286,10 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         baseUrlHttp: 'http://g.test',
         baseUrlSocket: 'http://g.test',
       });
-      expect(runtime.chargerJetonPersiste).toBe(chargerJetonPersiste);
-      expect(runtime.sauvegarderJetonPersiste).toBe(sauvegarderJetonPersiste);
+      expect(runtime.chargerSessionPersiste).toBe(chargerSessionPersiste);
+      expect(runtime.sauvegarderSessionPersiste).toBe(
+        sauvegarderSessionPersiste
+      );
       expect(typeof runtime.creerSocket).toBe('function');
     });
   });
@@ -242,7 +305,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       runtime.emettre('x', 1);
       expect(a).not.toHaveBeenCalled();
       expect(b).toHaveBeenCalledWith(1);
-      // Désabonnement d'un type devenu vide : sans erreur.
       runtime.ecouteurs.delete('x');
       expect(() => desabonnerA()).not.toThrow();
     });
@@ -309,7 +371,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         courriel: 'm@x.test',
         role: 'utilisateur',
       };
-      // Signature complète (url, options) pour lire le corps envoyé.
       const fetchMock = vi.fn<
         (
           url: string,
@@ -327,7 +388,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       expect(await runtime.profilObtenir()).toEqual(brut);
       expect(runtime.obtenirUtilisateurConnecte()).toEqual(brut);
 
-      // Sans nouveau mot de passe : pas de renouvellement du jeton.
       await runtime.profilModifierCompte({ motDePasseActuel: 'actuel' });
       expect(corps(1)).toEqual({ mot_de_passe_actuel: 'actuel' });
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -340,15 +400,16 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         mot_de_passe_actuel: 'actuel',
         mot_de_passe: 'nouveau123',
       });
-      // Jeton révoqué par le changement : reconnexion avec le nouveau mot
-      // de passe, nouveau jeton persisté, socket rouvert.
       expect(String(fetchMock.mock.calls[3][0])).toContain('/api/auth/login');
       expect(corps(3)).toEqual({
         identifiant: 'm@x.test',
         mot_de_passe: 'nouveau123',
       });
       expect(runtime.jeton).toBe('jwt-neuf');
-      expect(runtime.sauvegarderJetonPersiste).toHaveBeenCalledWith('jwt-neuf');
+      expect(runtime.sauvegarderSessionPersiste).toHaveBeenCalledWith({
+        jeton: 'jwt-neuf',
+        refreshToken: null,
+      });
       expect(sockets).toHaveLength(1);
 
       fetchMock.mockResolvedValue({
@@ -372,7 +433,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         'fetch',
         vi.fn(async (_url: string, options?: { method?: string }) => {
           if (options?.method !== 'DELETE') {
-            // Vérification de session après le 401 : jeton toujours valide.
             return reponseJson({ id: 'moi', pseudo: 'moi' });
           }
           pollPendantAppel = runtime.minuteurPollPresence;
@@ -382,7 +442,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
       await expect(runtime.profilSupprimerCompte('faux')).rejects.toThrow();
       expect(pollPendantAppel).toBeNull();
-      // Le compte existe toujours : la présence reprend.
       expect(demarrer).toHaveBeenCalledTimes(1);
       expect(runtime.obtenirUtilisateurConnecte()).not.toBeNull();
     });
@@ -395,7 +454,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(async () => {
-          // Déconnexion (autre onglet, session expirée) pendant l'appel.
           runtime.jeton = null;
           throw new Error('réseau coupé');
         })
@@ -510,6 +568,98 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       expect(runtime.partenairesDmConnus.has('u2')).toBe(true);
       expect(runtime.indexMessages.has('m1')).toBe(false);
       expect(runtime.indexMessages.has('r1')).toBe(false);
+    });
+
+    it('relaie les accusés de lecture sous les identifiants de l’app', async () => {
+      const { runtime, socket } = runtimeConnecte();
+      runtime.utilisateursConnus.set('u2', { id: 'u2', pseudo: 'bob' });
+      vi.spyOn(runtime, 'resoudrePseudos').mockResolvedValue(undefined);
+      runtime.connecterSocket();
+      const lectures: unknown[] = [];
+      runtime.on('lecture', (lecture: unknown) => lectures.push(lecture));
+      const date = '2026-01-01T00:00:00.000Z';
+      const ms = new Date(date).getTime();
+      const s = socket();
+
+      s._declencher('read-state.updated', {
+        kind: 'dm',
+        targetId: 'moi',
+        userId: 'u2',
+        lastReadAt: date,
+        lastReadMessageId: 'm1',
+      });
+      s._declencher('read-state.updated', {
+        kind: 'dm',
+        targetId: 'u2',
+        userId: 'moi',
+        lastReadAt: date,
+      });
+      s._declencher('read-state.updated', {
+        kind: 'room',
+        targetId: 'salon',
+        userId: 'u2',
+        lastReadAt: date,
+      });
+      for (const invalide of [
+        { kind: 'dm', targetId: 'u3', userId: 'u2', lastReadAt: date },
+        { kind: 'groupe', targetId: 'g', userId: 'u2', lastReadAt: date },
+        { kind: 'dm', targetId: 'moi', userId: 3, lastReadAt: date },
+        { kind: 'dm', targetId: null, userId: 'u2', lastReadAt: date },
+        { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: 1 },
+        { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: '' },
+        { kind: 'dm', targetId: 'moi', userId: 'u2', lastReadAt: 'abc' },
+        {
+          kind: 'room',
+          targetId: 'salon',
+          userId: 'u2',
+          lastReadAt: '+999999-01-01T00:00:00Z',
+        },
+        null,
+      ]) {
+        s._declencher('read-state.updated', invalide);
+      }
+
+      await vi.waitFor(() => expect(lectures).toHaveLength(3));
+      expect(lectures).toEqual(
+        expect.arrayContaining([
+          {
+            type: 'prive',
+            conversationId: 'moi:u2',
+            utilisateurId: 'u2',
+            nom: 'bob',
+            luJusqua: ms,
+            dernierMessageLuId: 'm1',
+            deMoi: false,
+          },
+          {
+            type: 'prive',
+            conversationId: 'moi:u2',
+            utilisateurId: 'moi',
+            nom: null,
+            luJusqua: ms,
+            dernierMessageLuId: null,
+            deMoi: true,
+          },
+          {
+            type: 'salon',
+            conversationId: 'salon',
+            utilisateurId: 'u2',
+            nom: 'bob',
+            luJusqua: ms,
+            dernierMessageLuId: null,
+            deMoi: false,
+          },
+        ])
+      );
+
+      runtime.utilisateurConnecte = null;
+      await runtime.traiterLectureEntrante({
+        kind: 'room',
+        targetId: 'salon',
+        userId: 'u2',
+        lastReadAt: date,
+      });
+      expect(lectures).toHaveLength(3);
     });
 
     it("ignore les événements d'un ancien socket", () => {
@@ -645,7 +795,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         'moi:u3',
       ]);
       expect(conversations[0].otherUser.pseudo).toBe('bob');
-      // u3 : aucun message, pas de pseudo résolu.
       expect(conversations[1]).toMatchObject({
         lastMessage: null,
         otherUser: { pseudo: 'u3' },
@@ -701,7 +850,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
         messages: [],
         finHistorique: false,
         lastMessage: { id: 'dernier' },
-        // Pseudo non résolu : signalé pour que la page redemande.
         otherUser: { id: 'casse', pseudo: 'casse', pseudoInconnu: true },
       });
     });
@@ -733,7 +881,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
               },
             ]);
           }
-          // Historique vide : le dernier message connu (liste) sert de repli.
           return reponseJson([]);
         })
       );
@@ -741,7 +888,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       const ids = (await runtime.obtenirConversationsPrivees()).map(
         (c: { id: string }) => c.id
       );
-      // Identifiants triés par creerDmId ('ancien' < 'moi').
       expect(ids).toEqual(['moi:recent', 'ancien:moi', 'moi:vide']);
     });
   });
@@ -756,7 +902,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       await runtime.chargerProfilsPublics(['u2']);
       expect(runtime.presences.u2).toBe('hors-ligne');
       expect(await runtime.rechercherUtilisateurs('bo')).toEqual([]);
-      expect(await runtime.obtenirResumesConversationsPrivees()).toEqual([]);
 
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reponseJson({}, 500)));
       await runtime.chargerProfilsPublics(['u3']);
@@ -774,7 +919,10 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
     it('restaure une session valide', async () => {
       const { runtime } = creerRuntime();
-      runtime.chargerJetonPersiste = vi.fn(() => 'jwt-persiste');
+      runtime.chargerSessionPersiste = vi.fn(() => ({
+        jeton: 'jwt-persiste',
+        refreshToken: null,
+      }));
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue(reponseJson({ id: 'moi', pseudo: 'moi' }))
@@ -810,7 +958,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       expect(runtime.avatarsARafraichir).toBe(false);
       socket()._declencher('connect');
       expect(runtime.avatarsARafraichir).toBe(true);
-      // Salons rejoints seulement une fois le socket authentifié.
       expect(socket().emit).not.toHaveBeenCalledWith(
         'room-message.join',
         expect.anything(),
@@ -896,7 +1043,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       expect(
         fetchMock.mock.calls.some(([url]) => String(url).includes('cursor=r0'))
       ).toBe(true);
-      // Les auteurs des messages chargés sont résolus (nom, photo).
       expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
         '/api/users/lookup?ids=moi'
       );
@@ -1254,7 +1400,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       runtime.connecterSocket();
       const premier = sockets[0];
       premier._declencher('connect');
-      // Remplacé sans passer par fermerSocket (minuteur toujours armé).
       runtime.socket = creerFauxSocket();
       vi.advanceTimersByTime(5000);
       expect(runtime.socketPret).toBe(false);
@@ -1273,7 +1418,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       runtime.presences.moi = 'en-ligne';
       runtime.connecterSocket();
       socket()._declencher('connect');
-      // Prêt par un autre chemin sans annuler le minuteur.
       runtime.socketPret = true;
       vi.advanceTimersByTime(5000);
       expect(annonces(socket())).toBe(0);
@@ -1282,7 +1426,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
   });
 
   describe('session expirée en cours d’utilisation', () => {
-    /** fetch : 401 sur l'appel métier, `me` pour GET /api/auth/me. */
     const stubFetch = (me: () => Promise<unknown>) => {
       const fetchMock = vi.fn(async (url: string) =>
         url.endsWith('/api/auth/me') ? me() : reponseJson({ erreur: 'x' }, 401)
@@ -1302,7 +1445,7 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       );
       await vi.waitFor(() => expect(expiree).toHaveBeenCalledTimes(1));
       expect(runtime.obtenirUtilisateurConnecte()).toBeNull();
-      expect(runtime.sauvegarderJetonPersiste).toHaveBeenCalledWith(null);
+      expect(runtime.sauvegarderSessionPersiste).toHaveBeenCalledWith(null);
     });
 
     it('jeton toujours valide (ex. mot de passe actuel incorrect) : rien', async () => {
@@ -1311,7 +1454,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       const expiree = vi.fn();
       runtime.on('session-expiree', expiree);
 
-      // Même réponse qu'un PATCH /api/auth/me au mot de passe actuel erroné.
       await expect(runtime.appelHttp('/api/users/lookup')).rejects.toThrow();
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       await Promise.resolve();
@@ -1343,7 +1485,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
 
       await expect(runtime.appelHttp('/api/a')).rejects.toThrow();
       await expect(runtime.appelHttp('/api/b')).rejects.toThrow();
-      // 2 appels métier + 1 seule vérification.
       expect(fetchMock).toHaveBeenCalledTimes(3);
       terminer();
       await vi.waitFor(() =>
@@ -1393,7 +1534,6 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       runtime.demarrerPollPresence();
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       runtime.arreterPollPresence();
-      // Signe de vie envoyé (config + PUT presence), mais pas de /publiques.
       expect(publiques()).toHaveLength(0);
 
       runtime.avatarsARafraichir = true;
@@ -1402,5 +1542,71 @@ describe('RealGatewayRuntime (couverture complémentaire)', () => {
       runtime.arreterPollPresence();
       expect(String(publiques()[0][0])).not.toContain('inclureAvatar=false');
     });
+  });
+});
+
+describe('pagination depuis une cible et confirmation de livraison', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('transmet la cible et le sens de pagination pour les DM et salons', async () => {
+    const { runtime } = runtimeConnecte();
+    const http = vi.spyOn(runtime, 'appelHttp').mockResolvedValue([]);
+    for (const contexte of ['dm', 'salon']) {
+      for (const options of [{ autourId: 'ancien' }, { apresId: 'ancien' }]) {
+        if (contexte === 'dm') {
+          await runtime.obtenirMessagesPriveesAvant({
+            conversationId: 'moi:u2',
+            taille: 50,
+            ...options,
+          });
+        } else {
+          await runtime.obtenirMessagesSalonAvant({
+            salonId: 'salon',
+            taille: 50,
+            ...options,
+          });
+        }
+        const url = new URL(
+          String(http.mock.calls.at(-1)?.[0]),
+          'http://gateway.test'
+        );
+        expect(url.searchParams.get('limit')).toBe('50');
+        if ('autourId' in options) {
+          expect(url.searchParams.get('around')).toBe('ancien');
+          expect(url.searchParams.has('cursor')).toBe(false);
+        } else {
+          expect(url.searchParams.get('cursor')).toBe('ancien');
+          expect(url.searchParams.get('direction')).toBe('after');
+        }
+      }
+    }
+  });
+
+  it('tolere une confirmation en panne et conserve la livraison deja recue', async () => {
+    const { runtime } = runtimeConnecte();
+    vi.spyOn(runtime, 'appelHttp').mockRejectedValue(new Error('offline'));
+    await expect(
+      runtime.confirmerLivraisonDm(messageBrut())
+    ).resolves.toBeUndefined();
+    const deliveredAt = '2026-01-01T00:00:01.000Z';
+    expect(
+      runtime.mapperMessageDm(messageBrut({ deliveredAt })).livraison
+    ).toBe(Date.parse(deliveredAt));
+    await runtime.confirmerLivraisonDm(messageBrut({ deliveredAt }));
+    await runtime.confirmerLivraisonDm(messageBrut({ recipientId: 'autre' }));
+    await runtime.confirmerLivraisonDm(messageBrut({ id: undefined }));
+    await runtime.confirmerLivraisonDm(messageBrut({ id: '' }));
+    expect(runtime.appelHttp).toHaveBeenCalledTimes(1);
+  });
+
+  it('transmet les confirmations de livraison recues en temps reel', () => {
+    const { runtime, socket } = runtimeConnecte();
+    const traiter = vi
+      .spyOn(runtime, 'traiterMessageDmModifie')
+      .mockImplementation(() => {});
+    runtime.connecterSocket();
+    const message = messageBrut({ deliveredAt: '2026-01-01T00:00:01.000Z' });
+    socket()._declencher('private-message.delivered', message);
+    expect(traiter).toHaveBeenCalledWith(message);
   });
 });

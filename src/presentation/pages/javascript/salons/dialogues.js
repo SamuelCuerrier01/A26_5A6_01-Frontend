@@ -1,16 +1,3 @@
-// salons/dialogues.js — Fenêtres : créer un salon ou un serveur, inviter, invitations reçues, membres, paramètres du salon, menu du serveur.
-//
-// Page des salons (index.html), découpée en scripts classiques chargés dans
-// l'ordre par index.html : etat → historique → affichage → dialogues →
-// session → temps-reel → renderer.js (démarrage). Ils partagent la même
-// portée globale (const/let/fonctions de haut niveau) : un fichier peut
-// utiliser ce qu'un autre définit, à condition que ce ne soit pas pendant
-// son propre chargement — seul renderer.js, chargé en dernier, lance quoi
-// que ce soit (voir aussi salons.chargement.test.ts, qui vérifie ce contrat).
-
-// --- Fenêtres : outils communs --------------------------------------------
-
-/** Exécute `action`, ferme la fenêtre, rafraîchit, affiche `message`. */
 async function agir(action, message) {
   try {
     await action();
@@ -42,10 +29,6 @@ function creerCaseACocher(libelle, coche = false) {
   return { champ, ligne };
 }
 
-/**
- * Bouton d'action destructive avec confirmation en deux temps (pas de
- * confirm() natif, jamais utilisé dans l'app).
- */
 function creerBoutonConfirme(texte, question, surConfirmation) {
   const bouton = creerEl('button', {
     classe: 'secondary-button full-width danger',
@@ -68,7 +51,6 @@ function creerBoutonConfirme(texte, question, surConfirmation) {
   return bouton;
 }
 
-// --- Créer un salon (modérateur du serveur minimum) -------------------------
 el.creer.addEventListener('click', () => {
   const serveur = etat.serveurActif;
   if (!serveur) return;
@@ -99,7 +81,6 @@ el.creer.addEventListener('click', () => {
   ]);
 });
 
-// --- « + » du rail : créer un serveur ou rejoindre un serveur public --------
 el.creerRail.addEventListener('click', () => {
   const champNom = creerEl('input', { attrs: { maxlength: '80' } });
   const public_ = creerCaseACocher(t('servers.publicLabel'));
@@ -117,7 +98,6 @@ el.creerRail.addEventListener('click', () => {
       }, t('servers.created'))
   );
 
-  // Recherche de serveurs publics (tous tant que le champ est vide).
   const recherche = creerEl('input', {
     classe: 'dm-search',
     attrs: {
@@ -131,72 +111,90 @@ el.creerRail.addEventListener('click', () => {
     classe: 'choice-list',
     attrs: { 'aria-live': 'polite' },
   });
+  const plus = creerBouton(
+    t('servers.showMorePublic'),
+    'secondary-button full-width',
+    () => void chercher(Number(plus.dataset.decalage))
+  );
+  plus.hidden = true;
   let numero = 0;
   let minuteur = null;
-  const chercher = async () => {
-    const n = ++numero;
-    liste.replaceChildren(
-      creerEl('p', { classe: 'empty-state', texte: t('dm.searching') })
+  const ligneServeur = (serveur) => {
+    const ligne = creerBouton('', 'user-choice', () =>
+      agir(async () => {
+        await window.electronAPI.rejoindreServeur(serveur.id);
+        serveurActifId = serveur.id;
+        salonActifId = null;
+      }, t('servers.joined'))
     );
-    let serveurs = [];
+    ligne.replaceChildren(
+      creerEl('span', {
+        classe: 'avatar small server-avatar',
+        texte: ChatUiShared.initialesServeur(serveur.nom),
+      }),
+      creerEl('span', {
+        classe: 'user-choice-identity',
+        enfants: [
+          creerEl('strong', { texte: serveur.nom }),
+          creerEl('small', {
+            texte: t('servers.memberCount', { n: serveur.nombreMembres }),
+          }),
+        ],
+      }),
+      creerEl('span', {
+        classe: 'user-choice-action',
+        texte: t('servers.join'),
+      })
+    );
+    ChatUiShared.remplirAvatar(ligne.firstChild, serveur.icone);
+    return ligne;
+  };
+  const chercher = async (decalage = 0) => {
+    const n = ++numero;
+    plus.disabled = true;
+    if (decalage === 0) {
+      plus.hidden = true;
+      liste.replaceChildren(
+        creerEl('p', { classe: 'empty-state', texte: t('dm.searching') })
+      );
+    }
+    let page;
     try {
-      serveurs = await window.electronAPI.decouvrirServeurs(recherche.value);
+      page = await window.electronAPI.decouvrirServeurs({
+        texte: recherche.value,
+        decalage,
+      });
     } catch (erreur) {
-      if (n === numero) {
+      if (n !== numero) return;
+      plus.disabled = false;
+      if (decalage === 0) {
         liste.replaceChildren(
           creerEl('p', { classe: 'empty-state', texte: messageErreur(erreur) })
         );
+      } else {
+        notifier(messageErreur(erreur), true);
       }
       return;
     }
     if (n !== numero) return;
-    if (!serveurs.length) {
+    plus.disabled = false;
+    plus.hidden = page.suivant === null;
+    plus.dataset.decalage = String(page.suivant ?? 0);
+    const lignes = page.serveurs.map(ligneServeur);
+    if (decalage > 0) {
+      liste.append(...lignes);
+    } else if (lignes.length) {
+      liste.replaceChildren(...lignes);
+    } else {
       liste.replaceChildren(
         creerEl('p', { classe: 'empty-state', texte: t('servers.noPublic') })
       );
-      return;
     }
-    liste.replaceChildren(
-      ...serveurs.map((serveur) =>
-        creerBouton('', 'user-choice', () =>
-          agir(async () => {
-            await window.electronAPI.rejoindreServeur(serveur.id);
-            serveurActifId = serveur.id;
-            salonActifId = null;
-          }, t('servers.joined'))
-        )
-      )
-    );
-    // Contenu des lignes (creerBouton ne prend qu'un texte simple).
-    [...liste.children].forEach((ligne, index) => {
-      const serveur = serveurs[index];
-      ligne.replaceChildren(
-        creerEl('span', {
-          classe: 'avatar small server-avatar',
-          texte: ChatUiShared.initialesServeur(serveur.nom),
-        }),
-        creerEl('span', {
-          classe: 'user-choice-identity',
-          enfants: [
-            creerEl('strong', { texte: serveur.nom }),
-            creerEl('small', {
-              texte: t('servers.memberCount', { n: serveur.nombreMembres }),
-            }),
-          ],
-        }),
-        creerEl('span', {
-          classe: 'user-choice-action',
-          texte: t('servers.join'),
-        })
-      );
-      ChatUiShared.remplirAvatar(ligne.firstChild, serveur.icone);
-    });
   };
   recherche.addEventListener('input', () => {
     window.clearTimeout(minuteur);
-    minuteur = window.setTimeout(chercher, 250);
+    minuteur = window.setTimeout(() => void chercher(), 250);
   });
-  // Le dialogue est un <form method="dialog"> : Entrée le fermerait.
   recherche.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') event.preventDefault();
   });
@@ -223,16 +221,14 @@ el.creerRail.addEventListener('click', () => {
     }),
     recherche,
     liste,
+    plus,
   ]);
   void chercher();
 });
 
-// --- Inviter dans le serveur (tout membre, sauf Chatvardage) ----------------
 el.inviter.addEventListener('click', () => {
   const serveur = etat.serveurActif;
   if (!serveur) return;
-  // Qui est déjà membre, pour les personnes affichées seulement (la liste
-  // complète des membres n'est plus chargée, voir membresParmi).
   const membreIds = new Set();
   const avecAppartenance = async (utilisateurs) => {
     try {
@@ -241,10 +237,7 @@ el.inviter.addEventListener('click', () => {
         ids: utilisateurs.map((user) => user.id),
       });
       for (const id of membres) membreIds.add(id);
-    } catch {
-      // Best-effort : sans réponse, l'invitation d'un membre est refusée
-      // par le serveur.
-    }
+    } catch {}
     return utilisateurs;
   };
   const statutDans = (user) =>
@@ -254,10 +247,6 @@ el.inviter.addEventListener('click', () => {
         ? 'invite'
         : null;
 
-  // Même sélecteur que "Nouveau message privé" (voir
-  // ChatUiShared.creerSelecteurUtilisateurs). Les invitations en attente ne
-  // sont connues que des modérateurs : pour un simple membre, inviter une
-  // personne déjà invitée est sans effet (idempotent côté serveur).
   const selecteur = ChatUiShared.creerSelecteurUtilisateurs({
     t,
     messageErreur,
@@ -291,7 +280,6 @@ el.inviter.addEventListener('click', () => {
   ouvrirDialogue(t('servers.inviteInto', { name: serveur.nom }), selecteur);
 });
 
-// --- Invitations reçues (à des serveurs) ------------------------------------
 el.invitations.addEventListener('click', () => {
   if (!etat.invitations.length) {
     ouvrirDialogue(
@@ -356,7 +344,6 @@ function repondreInvitation(serveurId, accepter) {
   );
 }
 
-// --- Membres du serveur (rôles, nommer modérateur, expulser) -----------------
 const CLES_ROLE = {
   proprietaire: 'servers.roleOwner',
   moderateur: 'channels.roleModerator',
@@ -367,8 +354,6 @@ el.membres.addEventListener('click', () => {
   if (!serveur) return;
   const monRole = roleActuel();
 
-  // Membres chargés par pages (Room-Service) : propriétaire en tête, puis
-  // modérateurs, puis membres. Plus de liste complète avec le serveur.
   const liste = creerEl('div', { classe: 'member-list' });
   const plus = creerBouton(
     t('servers.showMoreMembers'),
@@ -377,6 +362,7 @@ el.membres.addEventListener('click', () => {
   );
   plus.hidden = true;
   const connus = new Map();
+  const charges = [];
 
   async function chargerPage(decalage) {
     plus.disabled = true;
@@ -387,6 +373,7 @@ el.membres.addEventListener('click', () => {
       });
       for (const u of page.utilisateurs) connus.set(u.id, u);
       for (const { utilisateurId, role } of page.membres) {
+        charges.push(utilisateurId);
         liste.appendChild(ligneMembre(utilisateurId, role));
       }
       plus.hidden = page.suivant === null;
@@ -409,9 +396,15 @@ el.membres.addEventListener('click', () => {
       texte: nom.charAt(0).toUpperCase(),
     });
     ChatUiShared.remplirAvatar(avatarMembre, membre.avatar);
+    if (connus.has(utilisateurId) && utilisateurId !== utilisateurActuelId) {
+      ChatUiShared.rendreAvatarCliquable(avatarMembre, {
+        utilisateurId,
+        nom,
+        t,
+        ouvrir: (id) => ouvrirProfilUtilisateur(connus.get(id)),
+      });
+    }
 
-    // Ligne secondaire : présence (texte mis à jour en direct, voir
-    // onPresenceChange) et badge de rôle.
     const details = [
       creerEl('span', {
         classe: 'member-presence',
@@ -450,7 +443,6 @@ el.membres.addEventListener('click', () => {
 
     const actions = [];
     if (utilisateurId !== utilisateurActuelId && role !== 'proprietaire') {
-      // Nommer / retirer un modérateur : propriétaire ou admin.
       if (ChatUiShared.peutGererServeur(monRole)) {
         const promouvoir = role === 'membre';
         actions.push(
@@ -472,7 +464,6 @@ el.membres.addEventListener('click', () => {
           )
         );
       }
-      // Expulser : modérateur minimum, strictement au-dessus du membre.
       if (
         !serveur.parDefaut &&
         ChatUiShared.peutModererServeur(monRole) &&
@@ -492,6 +483,18 @@ el.membres.addEventListener('click', () => {
         );
       }
     }
+    if (
+      role === 'proprietaire' &&
+      monRole === 'admin' &&
+      !serveur.parDefaut &&
+      utilisateurId !== utilisateurActuelId
+    ) {
+      actions.push(
+        creerBouton(t('servers.kick'), 'member-action danger', () =>
+          choisirNouveauProprietaire(utilisateurId, nom)
+        )
+      );
+    }
     const enfants = [avatarMembre, identite];
     if (actions.length > 0) {
       enfants.push(
@@ -501,11 +504,48 @@ el.membres.addEventListener('click', () => {
     return creerEl('div', { classe: 'member-row', enfants });
   }
 
+  function choisirNouveauProprietaire(proprietaireId, nomProprietaire) {
+    const candidats = charges.filter((id) => id !== proprietaireId);
+    const choix = creerEl('div', { classe: 'choice-list' });
+    choix.replaceChildren(
+      ...(candidats.length
+        ? candidats.map((id) => {
+            const membre = connus.get(id) ?? {
+              id,
+              pseudo: t('channels.unknownUser'),
+            };
+            return creerBouton(
+              `${t('servers.makeOwner')} · ${ChatUiShared.nomAffiche(membre)}`,
+              'secondary-button full-width',
+              () =>
+                agir(
+                  () =>
+                    window.electronAPI.expulserMembre({
+                      serveurId: serveur.id,
+                      utilisateurId: proprietaireId,
+                      nouveauProprietaire: id,
+                    }),
+                  t('servers.kicked')
+                )
+            );
+          })
+        : [
+            creerEl('p', {
+              classe: 'empty-state',
+              texte: t('servers.noOtherMember'),
+            }),
+          ])
+    );
+    ouvrirDialogue(t('servers.transferTitle', { name: nomProprietaire }), [
+      creerEl('p', { texte: t('servers.transferHint') }),
+      choix,
+    ]);
+  }
+
   ouvrirDialogue(t('servers.membersOf', { name: serveur.nom }), [liste, plus]);
   void chargerPage(0);
 });
 
-// --- Paramètres du salon (modérateur du serveur minimum) ---------------------
 el.roomSettings?.addEventListener('click', () => {
   const salon = salonActif();
   if (!salon) return;
@@ -557,7 +597,6 @@ el.roomSettings?.addEventListener('click', () => {
   ]);
 });
 
-// --- Menu du serveur (clic sur son nom, en haut de la colonne) ---------------
 el.menuServeur?.addEventListener('click', () => {
   const serveur = etat.serveurActif;
   if (!serveur) return;
@@ -569,7 +608,6 @@ el.menuServeur?.addEventListener('click', () => {
       attrs: { maxlength: '80', value: serveur.nom },
     });
     const public_ = creerCaseACocher(t('servers.publicLabel'), serveur.public);
-    // Chatvardage reste public (règle de Room-Service).
     public_.champ.disabled = serveur.parDefaut;
     contenu.push(
       creerEl('label', {

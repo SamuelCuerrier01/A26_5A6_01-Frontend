@@ -52,13 +52,14 @@ npm start              # mode prod : build automatique (prestart) puis Electron 
 npm test               # vitest run
 npm run test:coverage  # avec couverture : 100 % exigé sur src/**/*.ts, RealGatewayRuntime.js et runtime/ (voir vitest.config.ts)
 npm run lint            # eslint . --ext .js,.jsx,.ts,.tsx
+npm run format:check    # prettier --check .
 npx tsc --noEmit        # compilation TypeScript sans émission
 npm audit --audit-level=high  # aucune vulnérabilité high/critical (vérifié en CI)
 npm run build           # build de la page de connexion (dist/login/)
 ```
 
 **Avant de considérer une tâche terminée**, dans cet ordre :
-`npm audit --audit-level=high` → `npx tsc --noEmit` → `npm run lint` → `npm test`
+`npm audit --audit-level=high` → `npm run lint` → `npm run format:check` → `npx tsc --noEmit` → `npm test`
 (ou `test:coverage` si le changement touche la logique) → `npm run build`. Un changement qui touche
 au dashboard ou aux messages privés (JS vanilla, jamais compilé) ne sera
 détecté par **aucun** de ces outils s'il casse au runtime — le seul moyen
@@ -66,7 +67,7 @@ fiable de le vérifier est de lancer l'app et de cliquer dedans (voir
 "Piège n°1" plus bas).
 
 CI (`.github/workflows/builds.yml`) : `npm ci && npm audit --audit-level=high &&
-npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
+npm run lint && npm run format:check && npx tsc --noEmit && npm run test:coverage && npm run build:login` à chaque
 PR, sur `main`/`develop`, et avant tout build multiplateforme (tag `v*` ou
 lancement manuel) — la couverture (100 %), les types et le build de la page
 de connexion sont donc vérifiés en CI. Le lint échoue au moindre
@@ -95,6 +96,26 @@ preload.js                  Seul pont autorisé vers le renderer
                             (notifications système, badge, focus fenêtre).
                             Injecte aussi la barre de titre (.app-titlebar)
                             dans chaque page, boutons → canaux 'fenetre:*'.
+src/partage/               Noyau React partagé avec le client mobile
+                            (A26_5A6_01-Mobile) : useAsyncResource,
+                            useSearchResults, search, groupResults,
+                            highlight. Sans dépendance à Electron, à
+                            React Native ni à l'application (seulement
+                            `react`) ; les textes d'erreur sont injectés
+                            (`describeError`). Partage par COPIE : les
+                            fichiers doivent rester identiques dans les
+                            deux dépôts, vérifié par
+                            A26_5A6_01-Infra/scripts/verifier-fichiers-partages.sh
+                            — modifier un fichier ici impose de reporter
+                            le même changement dans Mobile. Aucune page
+                            actuelle ne l'importe encore (réservé au futur
+                            écran de recherche Web) ; la couverture 100 %
+                            s'applique quand même. La saisie de recherche
+                            est tronquée à MAX_QUERY_LENGTH sans signal :
+                            l'écran consommateur pose `maxLength`.
+                            `useAsyncResource` exige un `load` STABLE
+                            (useCallback) : une fonction recréée à chaque
+                            rendu relance le chargement complet en boucle.
 scripts/start.js            Orchestre Vite + Electron (dev) ou juste
                             Electron après build (prod) — évite le rituel
                             manuel "deux terminaux + $env:NODE_ENV".
@@ -127,11 +148,10 @@ src/i18n/
                                message-prive.js (pas de require(), pas de
                                bundler — voir "Piège n°2").
   → Trois implémentations de la MÊME petite fonction, une par
-    environnement de module du projet. C'est voulu, pas de la dette :
-    voir le commentaire en tête de chaque fichier. Ne jamais essayer de
-    les fusionner en un seul fichier partagé — ça a déjà cassé le build
-    de prod une fois (Rollup traite les .js source comme de l'ESM, pas
-    du CommonJS).
+    environnement de module du projet (CommonJS, ESM, script classique).
+    C'est voulu, pas de la dette. Ne jamais essayer de les fusionner en
+    un seul fichier partagé — ça a déjà cassé le build de prod une fois
+    (Rollup traite les .js source comme de l'ESM, pas du CommonJS).
 
 src/presentation/pages/
   connexion/                   Page React (Vite root). LoginPage.tsx ne
@@ -161,16 +181,20 @@ src/presentation/pages/
                                 démarre la page (DOMContentLoaded). Rien ne
                                 doit s'exécuter au chargement (voir
                                 message-prive.chargement.test.ts).
-  javascript/notif-prefs.js    Préférences de notification, partagées
-                                entre les deux pages JS vanilla via
-                                window.NotifPrefs (même pattern que
-                                window.I18n). Chargé AVANT renderer.js/
+  javascript/notif-prefs.js    Préférences de notification et compteurs
+                                de non-lus, partagés entre les deux pages
+                                JS vanilla via window.NotifPrefs (même
+                                pattern que window.I18n). Les non-lus
+                                viennent de Message-Service (état de
+                                lecture serveur) : jamais de carte de
+                                lecture locale (localStorage). Chargé AVANT renderer.js/
                                 message-prive.js dans le HTML — comme
                                 i18n-browser.js et chat-ui-shared.js :
                                 l'ordre des <script> compte, ce sont des
                                 scripts classiques (pas des modules), qui
                                 partagent le même scope global.
-  javascript/chat-ui-shared.js Logique réseau/présence partagée entre
+  javascript/chat-ui-shared.js Logique réseau/présence et dialogue de
+                                recherche de messages, partagés entre
                                 les deux pages, expose window.ChatUiShared
                                 (même pattern que window.I18n/NotifPrefs).
 ```
@@ -257,9 +281,15 @@ conflit Git (`<<<<<<<`, `=======`, `>>>>>>>`) ne traîne dans le diff.
 
 ## Conventions
 
-- Noms de variables, fonctions et commentaires : **en français**, dans
-  tout le code (TS et JS). Les clés de traduction elles-mêmes sont en
+- Pas de commentaires dans le code : les explications vont dans le README,
+  l'architecture d'Infra ou ce fichier. Seules restent les directives
+  d'outils (`eslint-disable-next-line`, `@ts-expect-error`).
+- Noms de variables et fonctions : **en français**, dans tout le code
+  (TS et JS). Les clés de traduction elles-mêmes sont en
   anglais (`auth.invalidFormat`, `errors.ERR_PSEUDO_PRIS`).
+  Exception assumée : les identifiants de `src/partage/` sont en anglais
+  (`useAsyncResource`, `loadMore`…), car ces fichiers sont copiés à
+  l'identique dans le client mobile, qui suit la convention inverse.
 - Aucun texte d'UI en dur dans un composant ou un template — toujours via
   `t(langue, 'cle')`. Pour le HTML statique des pages vanilla, utiliser
   les attributs `data-i18n` / `data-i18n-title` / `data-i18n-aria-label` /
@@ -277,3 +307,29 @@ conflit Git (`<<<<<<<`, `=======`, `>>>>>>>`) ne traîne dans le diff.
 ## Documentation centrale
 
 Infra est la référence du démarrage complet, des architectures, contrats et scénarios de validation. Le README local décrit le dépôt et ses commandes; les guides détaillés sont dans `A26_5A6_01-Infra/docs/`. Toute modification de contrat doit mettre à jour la référence centrale et ses liens.
+
+## Choix délibérés (ne pas « corriger »)
+
+Les garanties de synchronisation (non-lus relus après chaque événement, lecture bornée au dernier message rendu, position de lecture monotone, état d'historique propre à chaque ouverture) sont décrites dans l'[architecture d'Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/main/docs/architecture-frontend.md#flux-importants). Les points ci-dessous ont été relevés en revue et volontairement gardés :
+
+- **IPv6 avec `[::1]`** : `URL.hostname` de Node garde les crochets.
+- **Pas de garde supplémentaire pour les modes de pagination** : chaque appelant fournit un seul mode et Message-Service rejette les combinaisons incompatibles (400).
+- **`serveur.salons` obligatoire** : Room-Service le fournit et il sert aussi aux adhésions Socket.IO ; un repli local masquerait un contrat invalide.
+- **Pas de boucle de profil** : `definirPresenceInterne` n'appelle pas `annoncerProfil` ; seule `modifierPresence` annonce une action locale.
+- **Confirmations de livraison individuelles** : elles ignorent déjà les messages sortants et livrés, sur des pages de 50 ; un envoi groupé demanderait un nouveau contrat.
+- **Alias `counter` dans `src/partage/useAsyncResource.ts`** : il capture la référence utilisée par le nettoyage de l'effet, conformément au lint des hooks. Fichier partagé avec Mobile.
+- **URL invalide refusée au démarrage par `URL`**, sans afficher la valeur brute (elle pourrait contenir des identifiants).
+- **`versConversationLocale` sans garde de session** : son appelant `obtenirNonLus` vérifie la session.
+- **`totalNonLus` refuse un type inconnu** : accepter une valeur hors contrat masquerait une erreur d'appel.
+- **Pas de repli à zéro dans `Math.max` des lectures** : `traiterLectureEntrante` fournit une date numérique et Message-Service valide les dates à la source.
+- **Minuteur de recherche après fermeture du dialogue** : il peut lancer une requête bornée de plus, sans fuite ni changement de conversation.
+- **Canal `resumes-conversations-privees` supprimé** : les non-lus viennent du serveur.
+- **CSS `:has()`** : le Chromium d'Electron le prend en charge.
+- **Comparaison lexicographique des identifiants à date égale** : elle reproduit l'ordre serveur `(createdAt, id)` ; un tri « naturel » divergerait du contrat.
+
+- **Blocs `catch` vides** : permis pour une opération facultative avec repli explicite ou un rafraîchissement relancé par le cycle de vie (coffre indisponible, profil, présence, éléments de fenêtre). Les opérations principales de session et de messagerie doivent propager ou traiter leur erreur. Une liste de numéros de ligne ou une directive par bloc répéterait cette règle et deviendrait périmée au prochain déplacement de code.
+- **JSDoc retirés des entités** : TypeScript fournit déjà les types au survol ; ne pas remettre des commentaires qui répètent paramètres et retours sans information de contrat supplémentaire.
+- **Build Electron** : utiliser le binaire local, épinglé à la version exacte du lockfile. `npm ci` vérifie leur cohérence ; revenir à `npx --yes` ajouterait un téléchargement à l'exécution sans renforcer ce contrôle.
+- **Revues automatiques** : configuration et rotation des secrets dans le [guide Infra](https://github.com/Chatvardage/A26_5A6_01-Infra/blob/c5fc686f262127f7985684d8df3739b549255eea/docs/revues-github.md), plutôt que dans les commentaires du workflow.
+
+- **Déconnexion de la session renouvelable** : `POST /api/auth/logout` reçoit `refresh_token` dans le corps JSON ; le contrôleur Auth ne demande pas de Bearer. L’effacement local précède cet appel pour fermer immédiatement la session, même hors réseau. Ajouter l’ancien accès dans l’en-tête ne corrigerait pas le contrat de révocation.

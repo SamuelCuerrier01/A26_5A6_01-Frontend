@@ -1,5 +1,3 @@
-// Le vrai module main est execute avec Electron simule : verifie la decision
-// et la navigation au clic, sans pretendre observer le centre de notifications OS.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';

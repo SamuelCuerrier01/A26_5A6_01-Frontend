@@ -1,26 +1,3 @@
-// salons/etat.js — Éléments du DOM, état de la page, stockage local, réseau et présence.
-//
-// Page des salons (index.html), découpée en scripts classiques chargés dans
-// l'ordre par index.html : etat → historique → affichage → dialogues →
-// session → temps-reel → renderer.js (démarrage). Ils partagent la même
-// portée globale (const/let/fonctions de haut niveau) : un fichier peut
-// utiliser ce qu'un autre définit, à condition que ce ne soit pas pendant
-// son propre chargement — seul renderer.js, chargé en dernier, lance quoi
-// que ce soit (voir aussi salons.chargement.test.ts, qui vérifie ce contrat).
-//
-// UI uniquement : toutes les opérations passent par l'API sécurisée du preload.
-//
-// Pas de require() ici : nodeIntegration est désactivé (à raison, voir
-// main.js) donc ce fichier n'a accès ni à Node ni au module i18n.js utilisé
-// par main.js/preload.js.
-//
-// I18n vient de i18n-browser.js, un script classique chargé avant celui-ci
-// (voir index.html) qui expose window.I18n comme global — même pattern que
-// NotifPrefs ci-dessous (voir son commentaire pour le garde-fou), et qui
-// tient tout l'état i18n (dictionnaire, langue courante/par défaut) et la
-// logique de lookup/substitution/traduction d'erreurs en UN SEUL endroit
-// partagé avec message-prive.js, plutôt que deux copies à synchroniser à la
-// main (voir i18n-browser.js pour le détail complet).
 const I18n =
   window.I18n ??
   (() => {
@@ -45,10 +22,6 @@ if (!ChatUiShared) {
   throw new Error('chat-ui-shared.js doit être chargé avant renderer.js');
 }
 
-// ThemeManager vient de theme-browser.js, même pattern que I18n ci-dessus
-// (script classique chargé avant celui-ci, voir index.html) — un seul
-// endroit qui applique data-theme sur <html> et retient le thème courant,
-// partagé avec message-prive.js.
 const ThemeManager =
   window.ThemeManager ??
   (() => {
@@ -62,16 +35,6 @@ const ThemeManager =
     };
   })();
 
-// NotifPrefs vient de notif-prefs.js, un script classique chargé avant celui-ci
-// (voir index.html) qui expose window.NotifPrefs comme global — cette référence
-// locale évite les erreurs ESLint no-undef (comme le fait déjà message-prive.js
-// avec `const NotifPrefs = window.NotifPrefs;`).
-// Garde-fou : si notif-prefs.js n'a pas chargé (ordre des <script> changé par
-// erreur dans index.html, échec de chargement, etc.), window.NotifPrefs serait
-// `undefined` et le moindre appel plus bas (afficherSalons/afficherMessages,
-// sur le chemin de rendu principal) ferait planter toute la page. On dégrade
-// plutôt vers un mode "sans notifications" : les ronds et le badge restent
-// simplement masqués, mais salons/messages continuent de s'afficher.
 const NotifPrefs =
   window.NotifPrefs ??
   (() => {
@@ -85,42 +48,25 @@ const NotifPrefs =
       obtenirMode: () => 'aucune',
       definirMode: () => {},
       afficheRonds: () => false,
-      marquerCommeLu: () => {},
-      estNonLu: () => false,
-      compterSalonsNonLus: () => 0,
-      compterConversationsNonLues: () => 0,
+      chargerNonLus: async () => {},
+      nombreNonLus: () => 0,
+      ajouterNonLu: () => {},
+      marquerLu: () => {},
+      totalNonLus: () => 0,
+      remplirCompteur: (element) => {
+        if (element) element.hidden = true;
+      },
       genererIconeBadge: () => null,
       appliquerBadge: () => {},
       traiterMessageRecu: async () => {},
     };
   })();
-// Fixé par initialiserUtilisateurCourant (état du processus main, jamais
-// sessionStorage : voir le piège n° 5).
 let utilisateurActuelId = null;
-// Utilisateur connecté complet ({id, pseudo, courriel, role} | null, voir
-// obtenirUtilisateurConnecte dans preload.js) — utilisateurActuelId ci-dessus
-// reste dérivé de cette valeur (voir initialiserUtilisateurCourant) pour ne
-// rien casser des usages existants qui n'ont besoin que de l'id, mais
-// utilisateurActuel sert surtout à l'affichage (pseudo, avatar) : les droits
-// de gestion viennent du rôle DANS le serveur actif (voir roleActuel()).
 let utilisateurActuel = null;
-// Préférences du compte (thème, langue, mode de notification, alias), tenues
-// à jour par main.js depuis User-Config-Service — voir appliquerPreferences.
 let preferences = null;
 let salonActifId = null;
-// Serveur affiché, mémorisé d'un lancement à l'autre (best-effort).
 const CLEF_SERVEUR_ACTIF = 'chatvardage:serveur-actif';
 let serveurActifId = lireStockage(localStorage, CLEF_SERVEUR_ACTIF);
-// Serveurs (autres que l'actif) ayant reçu un message depuis qu'on les a
-// quittés des yeux : pastille sur leur icône du rail. Partagé avec
-// message-prive.js via sessionStorage (même clé).
-const CLEF_SERVEURS_NON_LUS = 'chatvardage:serveurs-non-lus';
-const serveursNonLus = new Set(
-  JSON.parse(lireStockage(sessionStorage, CLEF_SERVEURS_NON_LUS) ?? '[]')
-);
-// Vrai après le premier actualiser() réussi : avant, le rail reste celui
-// affiché depuis le cache (voir ChatUiShared.afficherRailDepuisCache) au lieu
-// d'être vidé puis mémorisé vide.
 let etatCharge = false;
 let etat = {
   utilisateurs: [],
@@ -142,38 +88,18 @@ function ecrireStockage(stockage, clef, valeur) {
   try {
     if (valeur === null) stockage.removeItem(clef);
     else stockage.setItem(clef, valeur);
-  } catch {
-    // Best-effort : sans stockage, seul le souvenir est perdu.
-  }
+  } catch {}
 }
 
-function memoriserServeursNonLus() {
-  ecrireStockage(
-    sessionStorage,
-    CLEF_SERVEURS_NON_LUS,
-    JSON.stringify([...serveursNonLus])
-  );
-}
-
-/** Rôle de l'utilisateur dans le serveur affiché (null : aperçu). */
 function roleActuel() {
   return etat.serveurActif?.monRole ?? null;
 }
 let presences = {};
-// 'inconnu' tant que main.js n'a pas répondu : l'indicateur reste masqué
-// (voir .connection-status[data-state='inconnu'] dans styles.css).
 let etatReseau = { statut: 'inconnu', reconnexions: 0 };
-// Miroir côté renderer de fenetreEstFocusee dans main.js (voir
-// 'window:focus-changed' / 'window:is-focused' dans preload.js), initialisé
-// à `true` par défaut le temps que la vraie valeur arrive (voir plus bas où
-// on l'interroge dès le démarrage) : la fenêtre vient tout juste d'être
-// affichée à ce moment-là, donc `true` est la meilleure hypothèse de départ.
-// Sert uniquement à décider si la conversation actuellement affichée doit
-// être marquée "lue" (voir afficherMessages()) — main.js gère déjà son
-// propre état équivalent pour décider d'afficher ou non une notification
-// système, les deux doivent rester d'accord (voir le commentaire dans
-// afficherMessages()).
 let fenetreEstFocusee = true;
+
+let lecturesSalon = { salonId: null, lecteurs: [] };
+let separateurSalon = { salonId: null, nonLus: 0 };
 
 const el = {
   salons: document.querySelector('#channel-list'),
@@ -221,11 +147,8 @@ function afficherEtatReseau(nouvelEtat = etatReseau) {
       submitButton: el.envoyer,
     },
     t,
-    // Salon lisible mais en écriture réservée (ex. #annonces) : champ
-    // désactivé, voir aussi le placeholder dans afficherMessages().
     composerAutorise: Boolean(salonActif()?.peutEcrire),
   });
-  // La pastille de l'avatar dépend aussi de l'état réseau.
   afficherPresenceCourante();
 }
 
@@ -257,3 +180,4 @@ async function chargerEtatReseauEtPresences() {
 const salonActif = () => etat.salons.find((salon) => salon.id === salonActifId);
 const utilisateur = (id) => etat.utilisateurs.find((item) => item.id === id);
 
+let generationLecturesSalon = 0;

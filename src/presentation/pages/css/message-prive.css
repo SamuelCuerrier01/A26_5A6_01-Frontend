@@ -16,12 +16,6 @@
   --border: rgba(255, 255, 255, 0.08);
 }
 
-/* Thème clair : voir le même bloc (et le même commentaire) dans styles.css
-   — ces deux fichiers déclarent volontairement les mêmes tokens, puisque
-   message-prive.html charge les deux feuilles (styles.css puis
-   message-prive.css) : les valeurs doivent rester identiques entre les
-   deux, sans quoi celui chargé en second écraserait silencieusement
-   l'autre pour les variables en commun. */
 :root[data-theme='clair'] {
   --bg-app: #cdeee3;
   --bg-panel: #e3f6ef;
@@ -60,7 +54,13 @@ body {
   color: var(--text-primary);
 
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    'Twemoji',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
     sans-serif;
 }
 
@@ -115,8 +115,6 @@ body {
 }
 
 #dm-sidebar {
-  /* Même largeur que la colonne des salons (voir --sidebar-width dans
-     styles.css), et jamais rétrécie par le flex du body. */
   width: var(--sidebar-width);
   flex: 0 0 auto;
 
@@ -166,6 +164,14 @@ body {
 
 .friends-actions .active {
   background: var(--bg-bubble);
+}
+
+.conversation-more {
+  padding: 8px 4px;
+}
+
+.conversation-more button {
+  width: 100%;
 }
 
 #conversation-list {
@@ -238,7 +244,6 @@ body {
 .avatar.sans-presence::after {
   content: none;
 }
-
 
 .conversation-info {
   min-width: 0;
@@ -325,10 +330,6 @@ body {
   background: var(--hover-subtle);
 }
 
-/* Pas de margin-left: auto ici : la ligne garderait la largeur de son
-   contenu, et le max-width en % de .message-body (styles.css) se
-   calculerait sur cette largeur réduite — l'heure passait à la ligne.
-   row-reverse suffit à aligner le message à droite. */
 .message-row.own-message {
   flex-direction: row-reverse;
 }
@@ -344,8 +345,6 @@ body {
   align-items: flex-start;
 }
 
-/* La présence s'affiche uniquement dans l'en-tête de la conversation, pas
-   sur les avatars des messages. */
 .message-row .avatar::after {
   content: none;
 }
@@ -368,11 +367,6 @@ body {
   margin: 4px 0 0;
 }
 
-/* Même traitement "bulle" que les salons (styles.css,
-   .message-row.own/.message-row:not(.own) .text) — juste avec le nom de
-   classe propre à cette page (.own-message, voir message-prive.js) au lieu
-   de .own. Sans ces deux règles, .text restait sans fond ni coin
-   asymétrique : du texte plat, pas une bulle, quel que soit le thème. */
 .message-row.own-message .text {
   background: var(--accent-end);
   padding: 8px 12px;
@@ -441,7 +435,6 @@ body {
   color: var(--accent-start);
 }
 
-/* --- Indicateur de saisie style Discord --- */
 .typing-indicator {
   display: flex;
   align-items: center;
@@ -455,7 +448,6 @@ body {
   user-select: none;
 }
 
-/* Animation des 3 points */
 .typing-dots {
   display: inline-flex;
   align-items: center;
@@ -502,8 +494,11 @@ body {
   }
 }
 
-/* Mise en valeur du pseudo */
 .typing-text strong {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+#topbar .topbar-actions {
+  margin-left: auto;
 }

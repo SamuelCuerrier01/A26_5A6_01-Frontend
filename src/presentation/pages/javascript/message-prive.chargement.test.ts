@@ -3,19 +3,12 @@ import path from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Test d'intégration de la page des messages privés (message-prive.html) :
-// ses scripts sont exécutés dans l'ordre de la page avec une fausse API
-// Electron, pour vérifier qu'un message reçu, envoyé, modifié ou supprimé
-// est appliqué à sa conversation SANS recharger toutes les conversations.
-
 const PAGES = path.resolve(__dirname, '..');
 const RACINE = path.resolve(PAGES, '../../..');
 const traductions = JSON.parse(
   readFileSync(path.join(RACINE, 'src/i18n/translations.json'), 'utf8')
 );
 
-// Scripts de la page, dans l'ordre réel de message-prive.html (lu dans le
-// fichier : un script ajouté à la page est donc aussi chargé ici).
 const SCRIPTS = [
   ...readFileSync(path.join(PAGES, 'message-prive.html'), 'utf8').matchAll(
     /<script src="([^"]+)"><\/script>/g
@@ -64,7 +57,6 @@ async function chargerPage({
     {
       runScripts: 'dangerously',
       pretendToBeVisual: true,
-      // http (et non file://) : jsdom refuse sessionStorage aux origines opaques.
       url: 'http://localhost/message-prive.html',
       virtualConsole: consoleVirtuelle,
     }
@@ -72,8 +64,6 @@ async function chargerPage({
   pagesOuvertes.push(dom);
   const { window } = dom;
 
-  // jsdom ne fournit pas l'API native <dialog>. L'application l'utilise
-  // réellement dans Electron/Chromium; le test reproduit donc ce contrat.
   if (window.HTMLDialogElement) {
     window.HTMLDialogElement.prototype.showModal = function () {
       this.setAttribute('open', '');
@@ -105,6 +95,7 @@ async function chargerPage({
     obtenirEtatsSaisie: [],
     obtenirUtilisateurs: [],
     obtenirEtatSalons: { serveurs: [], salons: [] },
+    obtenirServeurs: [],
     obtenirConversationsPrivees: conversations(),
     envoyerMessagePrive: dm('m9', 'moi', 'envoyé', 9),
     ...autresReponses,
@@ -122,7 +113,6 @@ async function chargerPage({
         return (...args: unknown[]) => {
           appels[nom] = (appels[nom] ?? 0) + 1;
           const reponse = reponses[nom];
-          // Réponse calculée (peut échouer) : voir les tests d'erreur.
           if (typeof reponse === 'function') {
             return Promise.resolve().then(() => reponse(...args));
           }
@@ -142,7 +132,6 @@ async function chargerPage({
   });
 
   avantScripts(window);
-  // Sans démarrage : tous les scripts sauf le point d'entrée.
   const scripts = demarrer
     ? SCRIPTS
     : SCRIPTS.filter((script) => script !== 'javascript/message-prive.js');
@@ -153,7 +142,6 @@ async function chargerPage({
   }
   const document = window.document;
   if (!demarrer) return { window, document, rappels, appels, erreurs };
-  // La page démarre sur DOMContentLoaded, déjà passé à l'injection.
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
 
   if (!attendreMessages) return { window, document, rappels, appels, erreurs };
@@ -196,8 +184,6 @@ describe('page des messages privés', () => {
   });
 
   it('ne lance rien pendant le chargement des scripts (contrat du découpage)', async () => {
-    // messages-prives/*.js ne font que déclarer (aucun appel, aucun
-    // abonnement) : seul message-prive.js démarre la page.
     const { rappels, appels, erreurs } = await chargerPage({ demarrer: false });
     expect(erreurs).toEqual([]);
     expect(appels).toEqual({});
@@ -217,16 +203,13 @@ describe('page des messages privés', () => {
 
     const autre = await chargerPage({ avantScripts: cache('ancien-compte') });
     expect(autre.document.querySelector(icone)).toBeNull();
-    // Cache d'un autre compte : effacé (puis réécrit pour le compte courant
-    // quand le rail arrive du réseau).
     expect(
       autre.window.localStorage.getItem('chatvardage:rail-serveurs') ?? ''
     ).not.toContain('ancien-compte');
 
-    // Même compte, réseau encore en attente : le rail vient du cache.
     const moi = await chargerPage({
       avantScripts: cache('moi'),
-      autresReponses: { obtenirEtatSalons: () => new Promise(() => {}) },
+      autresReponses: { obtenirServeurs: () => new Promise(() => {}) },
     });
     await vi.waitFor(() =>
       expect(moi.document.querySelector(icone)).not.toBeNull()
@@ -254,7 +237,6 @@ describe('page des messages privés', () => {
     });
     expect(typesDemandes).toEqual([['prive']]);
 
-    // « + » du rail : ouvrir l'ajout de serveur sur la page des salons.
     document
       .getElementById('open-create-channel-rail')
       ?.dispatchEvent(new document.defaultView!.MouseEvent('click'));
@@ -291,7 +273,6 @@ describe('page des messages privés', () => {
       expect(textes(document)).toEqual(['salut', 'corrigé'])
     );
 
-    // Message de salon (sans conversationId) : ignoré par cette page.
     await rappels.onMessageModifieChange({
       id: 'r1',
       auteurId: 'bob',
@@ -341,7 +322,6 @@ describe('page des messages privés', () => {
       autresReponses: {
         obtenirConversationsPrivees: () => {
           essais += 1;
-          // Forme réelle d'une erreur IPC d'Electron côté page.
           if (essais === 1) {
             throw "Error invoking remote method 'obtenir-conversations-privees': Error: ERR_RESEAU_INDISPONIBLE";
           }
@@ -358,7 +338,6 @@ describe('page des messages privés', () => {
     expect(document.querySelector('#toast')?.textContent).toContain(
       'Impossible de joindre le serveur'
     );
-    // Nouvel essai ~5 s plus tard : la conversation apparaît.
     await vi.waitFor(
       () =>
         expect(
@@ -400,14 +379,22 @@ describe('page des messages privés', () => {
     const { document, rappels, erreurs } = await chargerPage({
       autresReponses: {
         obtenirSuggestionsDm: [
-          { id: 'alice', pseudo: 'alice', present: false, alias: null, avatar: null },
+          {
+            id: 'alice',
+            pseudo: 'alice',
+            present: false,
+            alias: null,
+            avatar: null,
+          },
         ],
       },
     });
 
     (document.getElementById('open-new-dm') as HTMLButtonElement).click();
     await vi.waitFor(() =>
-      expect(document.querySelector('.user-choice[data-user-id="alice"]')).not.toBeNull()
+      expect(
+        document.querySelector('.user-choice[data-user-id="alice"]')
+      ).not.toBeNull()
     );
 
     const avatar = document.querySelector(
@@ -420,10 +407,656 @@ describe('page des messages privés', () => {
     expect(avatar.classList.contains('offline')).toBe(false);
     expect(avatar.title).toBe(traductions.fr.dm.online);
 
-    rappels.onPresenceChange?.({ utilisateurId: 'alice', statut: 'hors-ligne' });
+    rappels.onPresenceChange?.({
+      utilisateurId: 'alice',
+      statut: 'hors-ligne',
+    });
     expect(avatar.classList.contains('offline')).toBe(true);
     expect(avatar.title).toBe(traductions.fr.dm.offline);
     expect(erreurs).toEqual([]);
   });
 
+  it('liste paginée : 15 conversations, puis « Voir plus de conversations »', async () => {
+    const liste = Array.from({ length: 20 }, (_, i) => ({
+      id: `c${i}:moi`,
+      participantIds: ['moi', `c${i}`],
+      otherUser: {
+        id: `c${i}`,
+        pseudo: `contact${i}`,
+        present: true,
+        alias: null,
+        avatar: null,
+      },
+      messages: [dm(`m${i}`, `c${i}`, `bonjour ${i}`, 100 - i)],
+      finHistorique: true,
+      lastMessage: dm(`m${i}`, `c${i}`, `bonjour ${i}`, 100 - i),
+    }));
+    const { document, erreurs } = await chargerPage({
+      autresReponses: { obtenirConversationsPrivees: liste },
+    });
+    const lignes = () =>
+      document.querySelectorAll(
+        '#conversation-list .conversation[data-conversation-id]'
+      );
+    const plus = () =>
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '#conversation-list button'
+        ),
+      ].find(
+        (bouton) =>
+          bouton.textContent === traductions.fr.dm.showMoreConversations
+      );
+    await vi.waitFor(() => expect(lignes()).toHaveLength(15));
+    expect(lignes()[0].getAttribute('data-conversation-id')).toBe('c0:moi');
+    plus()!.click();
+    expect(lignes()).toHaveLength(20);
+    expect(plus()).toBeUndefined();
+    expect(erreurs).toEqual([]);
+  });
+
+  it('non-lus : compteur par conversation, conversation affichée marquée lue', async () => {
+    const marques: unknown[] = [];
+    const deuxConversations = () => [
+      ...conversations(),
+      {
+        ...conversations()[0],
+        id: 'carla:moi',
+        otherUser: {
+          ...conversations()[0].otherUser,
+          id: 'carla',
+          pseudo: 'carla',
+        },
+        messages: [],
+        lastMessage: null,
+      },
+    ];
+    const nonLus = {
+      salons: { s1: 1 } as Record<string, number>,
+      prives: { 'bob:moi': 2, 'carla:moi': 4 },
+    };
+    const { document, rappels } = await chargerPage({
+      autresReponses: {
+        obtenirConversationsPrivees: deuxConversations(),
+        obtenirNonLus: () => nonLus,
+        obtenirServeurs: [
+          { id: 'srv', nom: 'Projet', icone: null, salonIds: ['s1'] },
+          { id: 'calme', nom: 'Calme', icone: null, salonIds: ['s2'] },
+        ],
+        marquerConversationLue: (donnees: unknown) => {
+          marques.push(donnees);
+          return { nonLus: 0 };
+        },
+      },
+    });
+    const compteur = (id: string) =>
+      document.querySelector<HTMLElement>(
+        `.conversation[data-conversation-id="${id}"] .notif-count`
+      );
+    await vi.waitFor(() =>
+      expect(marques).toEqual([
+        { type: 'prive', conversationId: 'bob:moi', messageId: 'm1' },
+      ])
+    );
+    expect(compteur('bob:moi')?.hidden).toBe(true);
+    expect(compteur('carla:moi')?.textContent).toBe('4');
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLElement>(
+          '.server-icon[data-serveur-id="srv"] .notif-count--rail'
+        )?.hidden
+      ).toBe(false)
+    );
+    expect(
+      document.querySelector<HTMLElement>(
+        '.server-icon[data-serveur-id="srv"] .notif-count--rail'
+      )?.textContent
+    ).toMatch(/^\d+\+?$/);
+    expect(
+      document.querySelector<HTMLElement>(
+        '.server-icon[data-serveur-id="calme"] .notif-count--rail'
+      )?.hidden
+    ).toBe(true);
+
+    nonLus.prives['bob:moi'] = 0;
+    nonLus.prives['carla:moi'] = 5;
+    await rappels.onNouveauMessage({
+      conversationType: 'dm',
+      message: {
+        ...dm('m2', 'carla', 'coucou', 2),
+        conversationId: 'carla:moi',
+      },
+    });
+    await vi.waitFor(() =>
+      expect(compteur('carla:moi')?.textContent).toBe('5')
+    );
+    nonLus.salons.s2 = 1;
+    await rappels.onNouveauMessage({
+      conversationType: 'salon',
+      salonId: 's2',
+      serveurId: 'calme',
+      message: { id: 'ms', auteurId: 'bob', contenu: 'x', date: 3 },
+    });
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLElement>(
+          '.server-icon[data-serveur-id="calme"] .notif-count--rail'
+        )?.hidden
+      ).toBe(false)
+    );
+  });
+
+  it('recherche : dans la conversation affichée seulement', async () => {
+    const recherches: unknown[] = [];
+    const { document, window } = await chargerPage({
+      autresReponses: {
+        rechercherMessages: (donnees: unknown) => {
+          recherches.push(donnees);
+          return {
+            resultats: [
+              {
+                type: 'prive',
+                conversationId: 'bob:moi',
+                auteurNom: 'bob',
+                message: dm('m1', 'bob', 'salut toi', 1),
+              },
+            ],
+            curseurSuivant: null,
+          };
+        },
+      },
+    });
+    const dialogue =
+      document.querySelector<HTMLDialogElement>('#search-dialog')!;
+    const champ = dialogue.querySelector<HTMLInputElement>('.search-input')!;
+    document.getElementById('open-search')?.click();
+    expect(dialogue.querySelector('.search-title')?.textContent).toBe(
+      'Rechercher dans bob'
+    );
+    champ.value = 'salut';
+    champ.dispatchEvent(new window.Event('input'));
+    await vi.waitFor(() =>
+      expect(dialogue.querySelectorAll('.search-result')).toHaveLength(1)
+    );
+    expect(recherches).toEqual([
+      { texte: 'salut', type: 'prive', conversationId: 'bob:moi' },
+    ]);
+    expect(dialogue.querySelector('.search-result-meta')?.textContent).toMatch(
+      /^bob · /
+    );
+
+    dialogue.querySelector<HTMLElement>('.search-result')?.click();
+    expect(dialogue.hasAttribute('open')).toBe(false);
+  });
+
+  it('recherche sans conversation affichée : champ désactivé, rien n’est cherché', async () => {
+    const { document, appels } = await chargerPage({
+      attendreMessages: false,
+      autresReponses: { obtenirConversationsPrivees: [] },
+    });
+    await vi.waitFor(() => expect(appels.obtenirConversationsPrivees).toBe(1));
+    const dialogue =
+      document.querySelector<HTMLDialogElement>('#search-dialog')!;
+    document.getElementById('open-search')?.click();
+    expect(
+      dialogue.querySelector<HTMLInputElement>('.search-input')?.disabled
+    ).toBe(true);
+    expect(dialogue.querySelector('.search-title')?.textContent).toBe(
+      traductions.fr.search.title
+    );
+    expect(dialogue.querySelector('.search-status')?.textContent).toBe(
+      traductions.fr.search.noConversation
+    );
+    expect(appels.rechercherMessages).toBeUndefined();
+  });
+
+  describe('non-lus et accusés de lecture', () => {
+    const conversationAvec = (messages: ReturnType<typeof dm>[]) => [
+      { ...conversations()[0], messages, lastMessage: messages.at(-1) },
+    ];
+    const lignes = (document: Document) =>
+      [...document.querySelectorAll('#message-list > *')].map((element) =>
+        element.classList.contains('unread-separator')
+          ? '---'
+          : (element.querySelector('.text')?.textContent ?? '')
+      );
+
+    it('✓ distribué puis ✓✓ lu en temps réel, « Lu » sous mon dernier message', async () => {
+      const { document, rappels } = await chargerPage({
+        attendreMessages: false,
+        autresReponses: {
+          obtenirConversationsPrivees: conversationAvec([
+            dm('m1', 'bob', 'salut', 1),
+            dm('m2', 'moi', 'ça va ?', 2),
+            dm('m3', 'moi', 'et toi ?', 3),
+          ]),
+          obtenirLectures: {
+            lecteurs: [{ utilisateurId: 'bob', nom: 'bob', luJusqua: 2 }],
+          },
+        },
+      });
+      await vi.waitFor(() =>
+        expect(document.querySelectorAll('.read-status')).toHaveLength(1)
+      );
+      const statuts = () =>
+        [...document.querySelectorAll('.read-status')].map(
+          (e) => e.textContent
+        );
+      const ligne = () => document.querySelector('.read-receipt')?.textContent;
+      expect(statuts()).toEqual(['○']);
+      expect(ligne()).toBeUndefined();
+      expect(
+        document
+          .querySelector('.read-status')
+          ?.closest('.message-row')
+          ?.querySelector('.text')?.textContent
+      ).toBe('et toi ?');
+
+      await rappels.onLectureChange({
+        type: 'prive',
+        conversationId: 'bob:moi',
+        utilisateurId: 'bob',
+        nom: 'bob',
+        luJusqua: 3,
+        deMoi: false,
+      });
+      await vi.waitFor(() => expect(statuts()).toEqual(['✓✓']));
+      expect(ligne()).toBeUndefined();
+
+      await rappels.onLectureChange({
+        type: 'prive',
+        conversationId: 'carla:moi',
+        utilisateurId: 'carla',
+        luJusqua: 1,
+        deMoi: false,
+      });
+      expect(statuts()).toEqual(['✓✓']);
+    });
+
+    it('séparateur « Nouveaux messages » gardé après le marquage comme lu', async () => {
+      const { document, appels } = await chargerPage({
+        attendreMessages: false,
+        autresReponses: {
+          obtenirConversationsPrivees: conversationAvec([
+            dm('m1', 'bob', 'salut', 1),
+            dm('m2', 'moi', 'ça va ?', 2),
+            dm('m3', 'bob', 'oui', 3),
+            dm('m4', 'bob', 'et toi ?', 4),
+          ]),
+          obtenirNonLus: { salons: {}, prives: { 'bob:moi': 2 } },
+          obtenirLectures: { lecteurs: [] },
+        },
+      });
+      await vi.waitFor(() => expect(appels.marquerConversationLue).toBe(1));
+      await vi.waitFor(() =>
+        expect(lignes(document)).toEqual([
+          '',
+          'salut',
+          'ça va ?',
+          '---',
+          'oui',
+          'et toi ?',
+        ])
+      );
+      expect(document.querySelector('.read-receipt')).toBeNull();
+    });
+
+    it('lu depuis un autre de mes appareils : les compteurs sont relus', async () => {
+      const { rappels, appels } = await chargerPage();
+      const avant = appels.obtenirNonLus;
+      await rappels.onLectureChange({
+        type: 'prive',
+        conversationId: 'bob:moi',
+        utilisateurId: 'moi',
+        luJusqua: 1,
+        deMoi: true,
+      });
+      await vi.waitFor(() => expect(appels.obtenirNonLus).toBe(avant + 1));
+    });
+
+    it('affiche seulement les coches sur le dernier message propre', async () => {
+      const { document } = await chargerPage({
+        attendreMessages: false,
+        autresReponses: {
+          obtenirConversationsPrivees: conversationAvec([
+            dm('m1', 'moi', 'mon message', 1),
+          ]),
+          obtenirLectures: {
+            lecteurs: [{ utilisateurId: 'bob', nom: 'bob', luJusqua: 1 }],
+          },
+        },
+      });
+      await vi.waitFor(() =>
+        expect(document.querySelector('.read-status')?.textContent).toBe('✓✓')
+      );
+      expect(document.querySelector('.read-receipt')).toBeNull();
+      expect(
+        document
+          .querySelector('.read-status')
+          ?.closest('.message-row')
+          ?.querySelector('.text')?.textContent
+      ).toBe('mon message');
+    });
+  });
+
+  it('recherche : charge l’historique jusqu’au message choisi et le met en évidence', async () => {
+    const demandes: unknown[] = [];
+    const { document, window } = await chargerPage({
+      autresReponses: {
+        obtenirConversationsPrivees: [
+          { ...conversations()[0], finHistorique: false },
+        ],
+        rechercherMessages: {
+          resultats: [
+            {
+              type: 'prive',
+              conversationId: 'bob:moi',
+              auteurNom: 'bob',
+              message: dm('ancien', 'bob', 'un vieux message', 0),
+            },
+          ],
+          curseurSuivant: null,
+        },
+        obtenirMessagesPriveesAvant: (donnees: unknown) => {
+          demandes.push(donnees);
+          return {
+            messages: [dm('ancien', 'bob', 'un vieux message', 0)],
+            finHistorique: true,
+          };
+        },
+      },
+    });
+    const dialogue =
+      document.querySelector<HTMLDialogElement>('#search-dialog')!;
+    const champ = dialogue.querySelector<HTMLInputElement>('.search-input')!;
+    document.getElementById('open-search')?.click();
+    champ.value = 'vieux';
+    champ.dispatchEvent(new window.Event('input'));
+    await vi.waitFor(() =>
+      expect(dialogue.querySelectorAll('.search-result')).toHaveLength(1)
+    );
+    dialogue.querySelector<HTMLElement>('.search-result')?.click();
+
+    await vi.waitFor(() =>
+      expect(
+        document
+          .querySelector('[data-message-id="ancien"]')
+          ?.classList.contains('message-cible')
+      ).toBe(true)
+    );
+    expect(demandes).toEqual([
+      expect.objectContaining({ autourId: 'ancien', taille: 50 }),
+      expect.objectContaining({ apresId: 'ancien', taille: 50 }),
+    ]);
+    expect(textes(document)).toEqual(['un vieux message', 'salut']);
+  });
+});
+
+it('fusionne un accusé reçu pendant le chargement initial, sans confondre deux messages de même date', async () => {
+  let resoudre!: (valeur: unknown) => void;
+  const cs = conversations();
+  cs[0].messages = [
+    dm('m1', 'moi', 'premier', 1),
+    dm('m2', 'moi', 'second', 1),
+  ];
+  const { document, rappels, appels } = await chargerPage({
+    attendreMessages: false,
+    autresReponses: {
+      obtenirConversationsPrivees: cs,
+      obtenirLectures: () =>
+        new Promise((r) => {
+          resoudre = r;
+        }),
+    },
+  });
+  await vi.waitFor(() => expect(appels.obtenirLectures).toBe(1));
+  await vi.waitFor(() =>
+    expect(document.querySelectorAll('.read-status')).toHaveLength(1)
+  );
+  await rappels.onLectureChange({
+    type: 'prive',
+    conversationId: 'bob:moi',
+    utilisateurId: 'bob',
+    nom: 'bob',
+    luJusqua: 1,
+    dernierMessageLuId: 'm1',
+    deMoi: false,
+  });
+  const statuts = () =>
+    [...document.querySelectorAll('.read-status')].map((e) => e.textContent);
+  expect(statuts()).toEqual(['○']);
+  resoudre({
+    lecteurs: [
+      {
+        utilisateurId: 'bob',
+        nom: 'bob',
+        luJusqua: 0,
+        dernierMessageLuId: 'ancien',
+      },
+    ],
+  });
+  await vi.waitFor(() => expect(statuts()).toEqual(['○']));
+  await rappels.onLectureChange({
+    type: 'prive',
+    conversationId: 'bob:moi',
+    utilisateurId: 'bob',
+    nom: 'bob',
+    luJusqua: 1,
+    dernierMessageLuId: 'm2',
+    deMoi: false,
+  });
+  expect(statuts()).toEqual(['✓✓']);
+  await rappels.onLectureChange({
+    type: 'prive',
+    conversationId: 'bob:moi',
+    utilisateurId: 'bob',
+    nom: 'bob',
+    luJusqua: 1,
+    dernierMessageLuId: 'm1',
+    deMoi: false,
+  });
+  expect(statuts()).toEqual(['✓✓']);
+});
+
+it('recharge les coches de la conversation ouverte après une reconnexion', async () => {
+  let luJusqua = 0;
+  const cs = conversations();
+  cs[0].messages = [dm('m1', 'moi', 'salut', 1)];
+  const { document, rappels } = await chargerPage({
+    autresReponses: {
+      obtenirConversationsPrivees: cs,
+      obtenirLectures: () => ({
+        lecteurs: [{ utilisateurId: 'bob', nom: 'bob', luJusqua }],
+      }),
+    },
+  });
+  await vi.waitFor(() =>
+    expect(document.querySelector('.read-status')?.textContent).toBe('○')
+  );
+  luJusqua = 1;
+  await rappels.onSynchronisationRequise();
+  await vi.waitFor(() =>
+    expect(document.querySelector('.read-status')?.textContent).toBe('✓✓')
+  );
+});
+
+it('recherche Dm : roue pendant un seul chargement puis pagination depuis la cible', async () => {
+  let resoudre!: (page: unknown) => void;
+  const demandes: unknown[] = [];
+  const { document, window } = await chargerPage({
+    autresReponses: {
+      obtenirMessagesPriveesAvant: (donnees: unknown) => {
+        demandes.push(donnees);
+        if (demandes.length === 1)
+          return new Promise((resolve) => {
+            resoudre = resolve;
+          });
+        return demandes.length === 2
+          ? { messages: [dm('m1', 'bob', 'salut', 1)], finHistorique: false }
+          : { messages: [dm('m2', 'bob', 'suite', 2)], finHistorique: true };
+      },
+    },
+  });
+  const attente = window.eval('allerAuMessageDm("ancien")');
+  expect(document.querySelector('.recherche-message-roue')).not.toBeNull();
+  expect(document.querySelectorAll('[data-message-id]')).toHaveLength(0);
+  await vi.waitFor(() => expect(demandes).toHaveLength(1));
+  expect(demandes[0]).toMatchObject({ autourId: 'ancien', taille: 50 });
+  resoudre({
+    messages: [dm('ancien', 'bob', 'Message ancien', 0)],
+    finHistorique: true,
+  });
+  await attente;
+  expect(document.querySelector('.recherche-message-roue')).toBeNull();
+  expect(
+    document
+      .querySelector('[data-message-id="ancien"]')
+      ?.classList.contains('message-cible')
+  ).toBe(true);
+  expect(document.querySelector('[data-message-id="m1"]')).not.toBeNull();
+  expect(demandes[1]).toMatchObject({ apresId: 'ancien', taille: 50 });
+  const bouton = [...document.querySelectorAll('button')].find(
+    (element) => element.textContent === traductions.fr.history.loadNewer
+  );
+  bouton!.click();
+  await vi.waitFor(() =>
+    expect(document.querySelector('[data-message-id="m2"]')).not.toBeNull()
+  );
+  expect(demandes[2]).toMatchObject({ apresId: 'm1', taille: 50 });
+  expect(
+    [...document.querySelectorAll('button')].some(
+      (element) => element.textContent === traductions.fr.history.loadNewer
+    )
+  ).toBe(false);
+  expect(document.querySelectorAll('[data-message-id="ancien"]')).toHaveLength(
+    1
+  );
+});
+
+it.each([
+  ['rien après la cible', () => ({ messages: [], finHistorique: true })],
+  [
+    'vérification en échec',
+    () => {
+      throw new Error('réseau');
+    },
+  ],
+])(
+  'recherche Dm : bouton « plus récents » selon la suite (%s)',
+  async (cas, suite) => {
+    let appel = 0;
+    const { document, window } = await chargerPage({
+      autresReponses: {
+        obtenirMessagesPriveesAvant: () =>
+          ++appel === 1
+            ? {
+                messages: [dm('ancien', 'bob', 'Message ancien', 0)],
+                finHistorique: true,
+              }
+            : suite(),
+      },
+    });
+    await window.eval('allerAuMessageDm("ancien")');
+    const bouton = [...document.querySelectorAll('button')].find(
+      (element) => element.textContent === traductions.fr.history.loadNewer
+    );
+    expect(Boolean(bouton)).toBe(cas === 'vérification en échec');
+  }
+);
+
+describe('fiche de profil (messages privés)', () => {
+  const avecCarol = () => [
+    ...conversations(),
+    {
+      id: 'carol:moi',
+      participantIds: ['moi', 'carol'],
+      otherUser: {
+        id: 'carol',
+        pseudo: 'carol',
+        present: false,
+        alias: 'Caro',
+        avatar: null,
+      },
+      messages: [],
+      finHistorique: true,
+      lastMessage: null,
+    },
+  ];
+
+  it('photo de la liste, de la barre du haut et des messages : fiche de l’autre personne', async () => {
+    const demandes: unknown[] = [];
+    const { document, window, erreurs } = await chargerPage({
+      autresReponses: {
+        obtenirConversationsPrivees: avecCarol(),
+        demarrerConversationPrivee: (donnees: {
+          autreUtilisateurId: string;
+        }) => {
+          demandes.push(donnees);
+          return { id: `${donnees.autreUtilisateurId}:moi` };
+        },
+      },
+    });
+    const fiche = () =>
+      document.querySelector<HTMLDialogElement>('.profile-card-dialog[open]');
+    const fermer = () =>
+      fiche()?.querySelector<HTMLButtonElement>('.close-button')?.click();
+
+    const actif = document.querySelector(
+      '#message-list .message-row .avatar-clickable'
+    ) as HTMLElement;
+    actif.click();
+    expect(fiche()?.querySelector('.profile-card-name')?.textContent).toBe(
+      'bob'
+    );
+    expect(fiche()?.querySelector('.profile-card-message')).toBeNull();
+    fermer();
+
+    const barre = document.querySelector<HTMLElement>('.topbar-avatar')!;
+    expect(barre.getAttribute('aria-label')).toBe('Voir le profil de bob');
+    barre.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+    expect(fiche()?.querySelector('.profile-card-handle')?.textContent).toBe(
+      '@bob'
+    );
+    fermer();
+    barre.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'x', bubbles: true })
+    );
+    expect(fiche()).toBeNull();
+
+    const carol = [
+      ...document.querySelectorAll<HTMLElement>(
+        '#conversation-list .conversation'
+      ),
+    ].find((li) => li.textContent?.includes('Caro'))!;
+    carol.querySelector<HTMLElement>('.avatar')!.click();
+    expect(carol.classList.contains('active')).toBe(false);
+    expect(fiche()?.querySelector('.profile-card-name')?.textContent).toBe(
+      'Caro'
+    );
+    fiche()!.querySelector<HTMLButtonElement>('.profile-card-message')!.click();
+    await vi.waitFor(() =>
+      expect(demandes).toEqual([
+        { utilisateurId: 'moi', autreUtilisateurId: 'carol' },
+      ])
+    );
+    expect(erreurs).toEqual([]);
+  });
+
+  it('sans conversation affichée, la photo de la barre du haut ne fait rien', async () => {
+    const { document } = await chargerPage({
+      attendreMessages: false,
+      autresReponses: { obtenirConversationsPrivees: [] },
+    });
+    await vi.waitFor(() =>
+      expect(
+        document
+          .querySelector('.topbar-avatar')
+          ?.classList.contains('avatar-clickable')
+      ).toBe(true)
+    );
+    document.querySelector<HTMLElement>('.topbar-avatar')!.click();
+    expect(document.querySelector('.profile-card-dialog')).toBeNull();
+  });
 });

@@ -1,30 +1,5 @@
 'use strict';
 
-/**
- * Préférences de notification, partagées entre index.html (renderer.js) et
- * message-prive.html (message-prive.js). Chargé comme script classique
- * (pas un module) AVANT ces deux fichiers, pour exposer `window.NotifPrefs`
- * comme un global simple utilisable depuis un script classique comme depuis
- * un module — évite de dupliquer cette logique dans les deux fichiers (une
- * même règle codée à deux endroits finit par diverger).
- *
- * Trois modes, mutuellement exclusifs, réglables par utilisateur :
- *  - 'systeme' : notification native du système (+ son, voir main.js), PLUS
- *    le petit rond (comme 'discret' ci-dessous) ;
- *  - 'discret' : aucune notification système, seulement le petit rond sur
- *    la conversation concernée (salon, icône de serveur, conversation
- *    privée) ;
- *  - 'aucune'  : rien du tout, ni notification système ni rond.
- *
- * Le rond est donc affiché dès que le mode n'est pas 'aucune' — voir
- * afficheRonds() ci-dessous, à utiliser plutôt que de comparer directement à
- * MODE_DISCRET pour décider si un rond doit apparaître.
- *
- * Le mode et l'état "lu/non lu" sont stockés dans localStorage (partagé
- * entre les deux pages puisqu'elles sont chargées depuis la même origine
- * file://, comme `sessionStorage.currentUserId` l'est déjà ailleurs dans
- * l'app), par utilisateur connecté sur cette machine.
- */
 (function (global) {
   const MODE_SYSTEME = 'systeme';
   const MODE_DISCRET = 'discret';
@@ -36,19 +11,10 @@
     return `notif:mode:${utilisateurId}`;
   }
 
-  function clefLecture(utilisateurId) {
-    return `notif:lecture:${utilisateurId}`;
-  }
-
   function clefApercu(utilisateurId) {
     return `notif:apercu:${utilisateurId}`;
   }
 
-  /**
-   * Vrai (par défaut) si le texte du message apparaît dans la notification
-   * système. Désactivable : ces notifications sont visibles sur un écran
-   * verrouillé. Préférence locale, comme le mode.
-   */
   function afficheApercu(utilisateurId) {
     if (!utilisateurId) return true;
     try {
@@ -65,9 +31,7 @@
         clefApercu(utilisateurId),
         affiche ? 'oui' : 'non'
       );
-    } catch {
-      // Best-effort, comme definirMode.
-    }
+    } catch {}
   }
 
   function obtenirMode(utilisateurId) {
@@ -76,17 +40,10 @@
       const valeur = global.localStorage.getItem(clefMode(utilisateurId));
       return MODES.includes(valeur) ? valeur : MODE_PAR_DEFAUT;
     } catch {
-      // localStorage indisponible (ex. mode privé restrictif) : on retombe
-      // sur le comportement historique de l'app (notification système).
       return MODE_PAR_DEFAUT;
     }
   }
 
-  /**
-   * Vrai si le rond de notification doit être affiché pour cet utilisateur,
-   * c'est-à-dire tant que son mode n'est pas 'aucune' (donc en 'systeme'
-   * comme en 'discret' — seul 'aucune' masque le rond).
-   */
   function afficheRonds(utilisateurId) {
     return obtenirMode(utilisateurId) !== MODE_AUCUNE;
   }
@@ -95,111 +52,138 @@
     if (!utilisateurId || !MODES.includes(mode)) return;
     try {
       global.localStorage.setItem(clefMode(utilisateurId), mode);
-    } catch {
-      // Best-effort : si le stockage échoue, la préférence ne persistera
-      // pas au prochain démarrage, mais ça ne doit pas casser l'app.
-    }
+    } catch {}
   }
 
-  function obtenirCarteLecture(utilisateurId) {
+  const compteurs = { salon: new Map(), prive: new Map() };
+  const lecturesEnCours = { salon: new Set(), prive: new Set() };
+  const rechargementsEnAttente = { salon: new Set(), prive: new Set() };
+  const rendusLectures = { salon: new Map(), prive: new Map() };
+  let generationChargement = 0;
+  let revisionCompteurs = 0;
+
+  async function chargerNonLus(api) {
+    const generation = ++generationChargement;
     try {
-      const brut = global.localStorage.getItem(clefLecture(utilisateurId));
-      const carte = brut ? JSON.parse(brut) : null;
-      return carte && typeof carte === 'object' ? carte : {};
-    } catch {
-      return {};
+      for (let tentative = 0; tentative < 2; tentative += 1) {
+        const revision = revisionCompteurs;
+        const nonLus = await api.obtenirNonLus();
+        if (generation !== generationChargement) return;
+        if (revision !== revisionCompteurs) continue;
+        for (const [type, source] of [
+          ['salon', nonLus?.salons],
+          ['prive', nonLus?.prives],
+        ]) {
+          for (const id of lecturesEnCours[type]) {
+            rechargementsEnAttente[type].add(id);
+          }
+          for (const id of compteurs[type].keys()) {
+            if (!lecturesEnCours[type].has(id)) compteurs[type].delete(id);
+          }
+          for (const [id, nombre] of Object.entries(source ?? {})) {
+            if (nombre > 0 && !lecturesEnCours[type].has(id))
+              compteurs[type].set(id, nombre);
+          }
+        }
+        return;
+      }
+    } catch (erreur) {
+      console.warn('[non-lus] compteurs indisponibles :', erreur);
     }
   }
 
-  function marquerCommeLu(utilisateurId, conversationId, timestamp) {
-    if (!utilisateurId || !conversationId) return;
-    const carte = obtenirCarteLecture(utilisateurId);
-    carte[conversationId] = timestamp ?? Date.now();
-    try {
-      global.localStorage.setItem(
-        clefLecture(utilisateurId),
-        JSON.stringify(carte)
-      );
-    } catch {
-      // Best-effort, voir definirMode() ci-dessus.
+  function nombreNonLus(type, conversationId) {
+    return compteurs[type]?.get(conversationId) ?? 0;
+  }
+
+  function ajouterNonLu(type, conversationId) {
+    if (!compteurs[type] || !conversationId) return;
+    revisionCompteurs += 1;
+    compteurs[type].set(conversationId, nombreNonLus(type, conversationId) + 1);
+  }
+
+  function marquerLu(api, type, conversationId, options = {}) {
+    rendusLectures[type].set(conversationId, options);
+    const messageId = options.messageId;
+    const nombre = nombreNonLus(type, conversationId);
+    if (lecturesEnCours[type].has(conversationId)) return;
+    if (!nombre) {
+      rendusLectures[type].delete(conversationId);
+      return;
     }
+    revisionCompteurs += 1;
+    lecturesEnCours[type].add(conversationId);
+    compteurs[type].delete(conversationId);
+    let reussi = false;
+    Promise.resolve()
+      .then(() =>
+        api.marquerConversationLue({
+          type,
+          conversationId,
+          ...(messageId ? { messageId } : {}),
+        })
+      )
+      .then((reponse) => {
+        reussi = true;
+        revisionCompteurs += 1;
+        const restants = Math.max(
+          nombreNonLus(type, conversationId),
+          reponse?.nonLus ?? 0
+        );
+        if (restants) compteurs[type].set(conversationId, restants);
+      })
+      .catch((erreur) => {
+        revisionCompteurs += 1;
+        compteurs[type].set(
+          conversationId,
+          nombreNonLus(type, conversationId) + nombre
+        );
+        console.warn('[non-lus] marquage comme lu impossible :', erreur);
+      })
+      .finally(async () => {
+        lecturesEnCours[type].delete(conversationId);
+        const rechargementDemande =
+          rechargementsEnAttente[type].delete(conversationId);
+        const dernierRendu =
+          rendusLectures[type].get(conversationId) ?? options;
+        rendusLectures[type].delete(conversationId);
+        const estAffichee = dernierRendu.estAffichee?.() ?? false;
+        if ((reussi && !estAffichee) || rechargementDemande) {
+          await chargerNonLus(api);
+        }
+        options.surChangement?.();
+        if (
+          reussi &&
+          nombreNonLus(type, conversationId) &&
+          dernierRendu.estAffichee?.() &&
+          (!messageId || dernierRendu.messageId !== messageId)
+        ) {
+          marquerLu(api, type, conversationId, dernierRendu);
+        }
+      });
   }
 
-  /**
-   * Indique si `conversationId` a une activité non lue pour `utilisateurId`.
-   * @param {string} utilisateurId
-   * @param {string} conversationId
-   * @param {{auteurId: string, timestamp: number}|null|undefined} dernierMessage
-   *   Le dernier message connu de la conversation (peu importe salon ou DM,
-   *   l'appelant normalise déjà la forme). `null`/`undefined` si la
-   *   conversation n'a aucun message.
-   */
-  function estNonLu(utilisateurId, conversationId, dernierMessage) {
-    if (!utilisateurId || !conversationId || !dernierMessage) return false;
-    // Mon propre dernier message ne compte jamais comme "non lu" pour moi.
-    if (dernierMessage.auteurId === utilisateurId) return false;
-    const carte = obtenirCarteLecture(utilisateurId);
-    const derniereLecture = carte[conversationId] ?? 0;
-    return (dernierMessage.timestamp ?? 0) > derniereLecture;
+  function totalNonLus({ type, conversationIds } = {}) {
+    const types = type ? [type] : ['salon', 'prive'];
+    let total = 0;
+    for (const t of types) {
+      const ids = conversationIds ?? [...compteurs[t].keys()];
+      for (const id of ids) total += nombreNonLus(t, id);
+    }
+    return total;
   }
 
-  // --- Badge d'icône d'application (partagé renderer.js / message-prive.js) --
-  // Ces fonctions vivaient auparavant en double dans renderer.js ET
-  // message-prive.js (copiées-collées à l'identique) — exactement le genre de
-  // risque de divergence décrit dans le commentaire en tête de ce fichier.
-  // Elles vivent maintenant ici, seul endroit partagé entre les deux pages.
-
-  /** Le dernier message d'un salon (forme `{ messages: [...] }`), normalisé
-   * pour estNonLu()/compterSalonsNonLus(). */
-  function dernierMessageSalon(salon) {
-    const messages = salon?.messages;
-    if (!messages || !messages.length) return null;
-    const dernier = messages[messages.length - 1];
-    return { auteurId: dernier.auteurId, timestamp: dernier.date };
+  function libelleNonLus(nombre) {
+    return nombre > 99 ? '99+' : String(nombre);
   }
 
-  /** Le dernier message d'une conversation privée (forme `{ lastMessage }`),
-   * normalisé pour estNonLu()/compterConversationsNonLues(). */
-  function dernierMessageConversation(conversation) {
-    const dernier = conversation?.lastMessage;
-    if (!dernier) return null;
-    return { auteurId: dernier.auteurId, timestamp: dernier.envoi };
+  function remplirCompteur(element, nombre, visible = true) {
+    if (!element) return;
+    const affiche = visible && nombre > 0;
+    element.hidden = !affiche;
+    element.textContent = affiche ? libelleNonLus(nombre) : '';
   }
 
-  /** Nombre de salons non lus pour `utilisateurId` parmi `salons`. */
-  function compterSalonsNonLus(utilisateurId, salons) {
-    return (salons ?? []).reduce(
-      (total, salon) =>
-        estNonLu(utilisateurId, salon.id, dernierMessageSalon(salon))
-          ? total + 1
-          : total,
-      0
-    );
-  }
-
-  /** Nombre de conversations privées non lues pour `utilisateurId` parmi
-   * `conversations`. */
-  function compterConversationsNonLues(utilisateurId, conversations) {
-    return (conversations ?? []).reduce(
-      (total, conversation) =>
-        estNonLu(
-          utilisateurId,
-          conversation.id,
-          dernierMessageConversation(conversation)
-        )
-          ? total + 1
-          : total,
-      0
-    );
-  }
-
-  /**
-   * Dessine un petit badge numérique (cercle rouge + chiffre blanc) dans un
-   * canvas hors-écran. Utilisé uniquement pour la superposition d'icône
-   * Windows (setOverlayIcon dans main.js), qui exige une image plutôt qu'un
-   * simple nombre — contrairement à app.setBadgeCount (macOS/Linux), qui
-   * affiche directement un chiffre sans qu'on ait à le dessiner.
-   */
   function genererIconeBadge(nombre) {
     const texte = nombre > 9 ? '9+' : String(nombre);
     const taille = 32;
@@ -207,6 +191,7 @@
     canvas.width = taille;
     canvas.height = taille;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
     ctx.fillStyle = '#e53935';
     ctx.beginPath();
     ctx.arc(taille / 2, taille / 2, taille / 2, 0, Math.PI * 2);
@@ -219,13 +204,6 @@
     return canvas.toDataURL('image/png');
   }
 
-  /**
-   * Envoie `nombre` à `serviceNotifications.setBadgeCount` (voir preload.js /
-   * main.js), en générant l'icône de superposition Windows seulement si
-   * nombre > 0. `serviceNotifications` est passé en paramètre plutôt que lu
-   * depuis un global : renderer.js et message-prive.js exposent chacun leur
-   * propre référence locale à window.notifications.
-   */
   function appliquerBadge(serviceNotifications, nombre) {
     if (typeof serviceNotifications?.setBadgeCount !== 'function') return;
     serviceNotifications.setBadgeCount(
@@ -234,23 +212,17 @@
     );
   }
 
-  // --- Traitement d'un message reçu en temps réel ----------------------
-  // Corps partagé du handler `onNouveauMessage` de salons/temps-reel.js et
-  // message-prive.js : log de diagnostic, résolution du mode NotifPrefs de
-  // l'utilisateur actuellement affiché, et décision de déclencher ou non une
-  // notification système. Seule la partie "quoi rafraîchir à l'écran" diffère
-  // réellement entre les deux pages (une page affiche les salons, l'autre les
-  // conversations privées) — elle reste donc du ressort de l'appelant, via
-  // les callbacks `surSalon`/`surPrive`.
   async function traiterMessageRecu(message, options) {
-    const { utilisateurId, surSalon, surPrive, notifierMessageSysteme } =
-      options ?? {};
+    const {
+      utilisateurId,
+      surSalon,
+      surPrive,
+      notifierMessageSysteme,
+      api,
+      surNonLusActualises,
+    } = options ?? {};
     try {
       const mode = obtenirMode(utilisateurId);
-      // Log de diagnostic : lance l'app avec `NODE_ENV=development` pour voir
-      // les DevTools et cette ligne dans la console si un message de démo
-      // semble ne rien déclencher. Ne casse rien en production, où personne
-      // ne regarde la console de toute façon.
       console.log(
         `[notifications:message-recu] reçu (type=${message.type}, auteur=${message.auteurId}, utilisateur courant=${utilisateurId}, mode=${mode})`
       );
@@ -268,13 +240,15 @@
           `[notifications:message-recu] pas de notification système : mode actuel = "${mode}" (seul le mode "systeme" en déclenche).`
         );
       } else {
-        // Contenu masqué si l'utilisateur l'a demandé (écran verrouillé) :
-        // main.js affiche alors un texte générique à la place.
         notifierMessageSysteme?.(
           afficheApercu(utilisateurId)
             ? message
             : { ...message, contenu: '', apercuMasque: true }
         );
+      }
+      if (api && message.auteurId !== utilisateurId) {
+        await chargerNonLus(api);
+        await surNonLusActualises?.();
       }
     } catch (erreur) {
       console.error('[notifications:message-recu] ERREUR:', erreur);
@@ -291,11 +265,13 @@
     afficheRonds,
     afficheApercu,
     definirApercu,
-    marquerCommeLu,
-    estNonLu,
-    dernierMessageSalon,
-    compterSalonsNonLus,
-    compterConversationsNonLues,
+    chargerNonLus,
+    nombreNonLus,
+    ajouterNonLu,
+    marquerLu,
+    totalNonLus,
+    libelleNonLus,
+    remplirCompteur,
     genererIconeBadge,
     appliquerBadge,
     traiterMessageRecu,
